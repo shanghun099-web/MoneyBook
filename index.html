@@ -19,14 +19,38 @@ const CATEGORIES = {
 };
 
 export default function App() {
-  // --- 상태 관리 ---
-  const [fixedExpenses, setFixedExpenses] = useState(INITIAL_FIXED_EXPENSES);
-  const [transactions, setTransactions] = useState([
-    // 예시 데이터가 채워진 상태로 시작하여 직관적인 이해를 도움
-    { id: 't-mock-1', type: 'income', category: '주수입', amount: 3500000, date: '2026-06-01', description: '월급 입금' },
-    { id: 't-mock-2', type: 'expense', category: '식비', amount: 12500, date: '2026-06-02', description: '점심 식사' },
-    { id: 't-mock-3', type: 'expense', category: '교통비', amount: 55000, date: '2026-06-03', description: '교통카드 충전' },
-  ]);
+  // --- 상태 관리 (로컬스토리지 연동) ---
+  const [fixedExpenses, setFixedExpenses] = useState(() => {
+    const saved = localStorage.getItem('gem_fixed_expenses');
+    return saved ? JSON.parse(saved) : INITIAL_FIXED_EXPENSES;
+  });
+
+  const [transactions, setTransactions] = useState(() => {
+    const saved = localStorage.getItem('gem_transactions');
+    return saved ? JSON.parse(saved) : [
+      { id: 't-mock-1', type: 'income', category: '주수입', amount: 3500000, date: '2026-06-01', description: '월급 입금' },
+      { id: 't-mock-2', type: 'expense', category: '식비', amount: 12500, date: '2026-06-02', description: '점심 식사' },
+      { id: 't-mock-3', type: 'expense', category: '교통비', amount: 55000, date: '2026-06-03', description: '교통카드 충전' },
+    ];
+  });
+
+  // --- 보안 상태 ---
+  const [appPassword, setAppPassword] = useState(() => {
+    return localStorage.getItem('gem_app_password') || '';
+  });
+  
+  const [isLocked, setIsLocked] = useState(() => {
+    // 비밀번호가 설정되어 있다면 최초 구동 시 잠금 상태로 시작
+    return !!localStorage.getItem('gem_app_password');
+  });
+
+  // PIN 입력 전용 상태
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState(false);
+  
+  // 비밀번호 신규 설정 과정 상태 (0: 해당없음, 1: 최초입력, 2: 재입력확인)
+  const [setupStep, setSetupStep] = useState(0);
+  const [tempNewPin, setTempNewPin] = useState('');
 
   // 설정 모달 및 트랜잭션 추가 폼 상태
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -45,8 +69,26 @@ export default function App() {
   const [feAmount, setFeAmount] = useState('');
   const [feDay, setFeDay] = useState(1);
 
+  // 보안 설정 변경용 임시 상태
+  const [securityTab, setSecurityTab] = useState('info'); // 'info' | 'change'
+  const [newSecPin, setNewSecPin] = useState('');
+  const [confirmSecPin, setConfirmSecPin] = useState('');
+
   // 알림 토스트 상태
   const [toastMessage, setToastMessage] = useState(null);
+
+  // --- 자동 저장 이펙트 ---
+  useEffect(() => {
+    localStorage.setItem('gem_fixed_expenses', JSON.stringify(fixedExpenses));
+  }, [fixedExpenses]);
+
+  useEffect(() => {
+    localStorage.setItem('gem_transactions', JSON.stringify(transactions));
+  }, [transactions]);
+
+  useEffect(() => {
+    localStorage.setItem('gem_app_password', appPassword);
+  }, [appPassword]);
 
   // --- 알림 유틸리티 ---
   const showToast = (msg) => {
@@ -55,24 +97,20 @@ export default function App() {
   };
 
   // --- 헬퍼 함수 ---
-  // 숫자 천단위 쉼표 포맷팅
   const formatKRW = (num) => {
     return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' })
       .format(num)
       .replace('₩', '₩ ');
   };
 
-  // 날짜 정렬 헬퍼 (고정비 정렬용: 1일 ~ 31일(말일))
   const sortedFixedExpenses = useMemo(() => {
     return [...fixedExpenses].sort((a, b) => a.day - b.day);
   }, [fixedExpenses]);
 
-  // 이번 달에 해당하는 거래 내역만 필터링
   const monthlyTransactions = useMemo(() => {
     return transactions.filter(t => t.date.startsWith(currentMonth));
   }, [transactions, currentMonth]);
 
-  // 이번 달 고정비 납부 여부 맵 생성 (key: fixedExpenseId, value: transaction Object)
   const paidFixedExpensesMap = useMemo(() => {
     const map = {};
     monthlyTransactions.forEach(t => {
@@ -83,7 +121,6 @@ export default function App() {
     return map;
   }, [monthlyTransactions]);
 
-  // 대시보드 요약 지표 계산
   const summary = useMemo(() => {
     let income = 0;
     let expense = 0;
@@ -103,7 +140,6 @@ export default function App() {
       }
     });
 
-    // 전체 고정비 예정액
     const totalFixedPlanned = fixedExpenses.reduce((sum, fe) => sum + fe.amount, 0);
     const unpaidFixedPlanned = fixedExpenses.reduce((sum, fe) => {
       const isPaid = !!paidFixedExpensesMap[fe.id];
@@ -121,9 +157,91 @@ export default function App() {
     };
   }, [monthlyTransactions, fixedExpenses, paidFixedExpensesMap]);
 
-  // --- 비즈니스 로직 ---
+  // --- 키패드 보안 제어 로직 ---
+  const handleKeypadPress = (val) => {
+    setPinError(false);
 
-  // 일반 거래 내역 등록
+    // 백스페이스 처리
+    if (val === 'back') {
+      setPinInput(prev => prev.slice(0, -1));
+      return;
+    }
+
+    // 이미 4자리 가득 찬 상태면 패스
+    if (pinInput.length >= 4) return;
+
+    const nextPin = pinInput + val;
+    setPinInput(nextPin);
+
+    // 4자리가 완성되었을 때의 검증 프로세스
+    if (nextPin.length === 4) {
+      if (!appPassword) {
+        // [비밀번호 최초 설정 모드]
+        if (setupStep === 0 || setupStep === 1) {
+          // 1단계 입력 완료
+          setTempNewPin(nextPin);
+          setSetupStep(2);
+          setPinInput('');
+          showToast('확인을 위해 한 번 더 입력해 주세요.');
+        } else if (setupStep === 2) {
+          // 2단계 일치 검증
+          if (nextPin === tempNewPin) {
+            setAppPassword(nextPin);
+            setIsLocked(false);
+            setSetupStep(0);
+            setPinInput('');
+            showToast('보안 비밀번호가 안전하게 설정되었습니다!');
+          } else {
+            setPinError(true);
+            setPinInput('');
+            showToast('비밀번호가 일치하지 않습니다. 다시 설정해 주세요.');
+            setSetupStep(1); // 1단계로 회귀
+          }
+        }
+      } else {
+        // [일반적인 잠금 해제 모드]
+        if (nextPin === appPassword) {
+          setIsLocked(false);
+          setPinInput('');
+          showToast('성공적으로 잠금이 해제되었습니다.');
+        } else {
+          setPinError(true);
+          // 0.5초 후 초기화하여 햅틱 오류 피드백 모사
+          setTimeout(() => {
+            setPinInput('');
+            setPinError(false);
+          }, 800);
+          showToast('비밀번호가 올바르지 않습니다.');
+        }
+      }
+    }
+  };
+
+  // 물리 키보드 숫자 입력 대응
+  useEffect(() => {
+    if (!isLocked) return;
+    const handleKeyDown = (e) => {
+      if (e.key >= '0' && e.key <= '9') {
+        handleKeypadPress(e.key);
+      } else if (e.key === 'Backspace') {
+        handleKeypadPress('back');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isLocked, pinInput, appPassword, setupStep, tempNewPin]);
+
+  // 수동 앱 잠금 실행
+  const handleLockApp = () => {
+    if (!appPassword) {
+      setSetupStep(1);
+    }
+    setIsLocked(true);
+    setPinInput('');
+    showToast('보안 잠금 상태로 전환되었습니다.');
+  };
+
+  // --- 비즈니스 로직 ---
   const handleAddTransaction = (e) => {
     e.preventDefault();
     if (!txAmount || isNaN(txAmount) || parseInt(txAmount) <= 0) {
@@ -150,17 +268,14 @@ export default function App() {
     showToast('새 거래 내역이 등록되었습니다.');
   };
 
-  // 고정비 간편 납부 토글 (체크/해제)
   const handleToggleFixedPayment = (fe) => {
     const paidTx = paidFixedExpensesMap[fe.id];
 
     if (paidTx) {
-      // 이미 납부된 상태 -> 납부 취소 처리 (거래 내역에서 제거)
       setTransactions(prev => prev.filter(t => t.id !== paidTx.id));
       showToast(`[${fe.name}] 납부가 취소되었습니다.`);
     } else {
-      // 납부 미완료 상태 -> 자동으로 해당 월의 이체 날짜에 맞춰 거래 내역 추가
-      const dayStr = String(fe.day === 31 ? '28' : fe.day).padStart(2, '0'); // 말일 안전 보정 포함
+      const dayStr = String(fe.day === 31 ? '28' : fe.day).padStart(2, '0');
       const paymentDate = `${currentMonth}-${dayStr}`;
 
       const newTx = {
@@ -170,7 +285,7 @@ export default function App() {
         amount: fe.amount,
         date: paymentDate,
         description: `[고정] ${fe.name}`,
-        fixedExpenseId: fe.id // 추적용 ID 매핑
+        fixedExpenseId: fe.id
       };
 
       setTransactions(prev => [newTx, ...prev]);
@@ -178,13 +293,11 @@ export default function App() {
     }
   };
 
-  // 특정 거래 내역 삭제
   const handleDeleteTransaction = (id) => {
     setTransactions(prev => prev.filter(t => t.id !== id));
     showToast('기록이 삭제되었습니다.');
   };
 
-  // 고정비 항목 추가하기
   const handleAddFixedExpense = (e) => {
     e.preventDefault();
     if (!feName.trim()) {
@@ -202,14 +315,12 @@ export default function App() {
     }
 
     if (editingFeId) {
-      // 수정 모드
       setFixedExpenses(prev => prev.map(fe => {
         if (fe.id === editingFeId) {
           return { ...fe, name: feName, amount: parseInt(feAmount), day: dayNum };
         }
         return fe;
       }));
-      // 기존에 이미 등록된 이번 달 자동 납부 금액도 실시간 업데이트 대응
       setTransactions(prev => prev.map(t => {
         if (t.fixedExpenseId === editingFeId) {
           return { ...t, amount: parseInt(feAmount), description: `[고정] ${feName}` };
@@ -219,7 +330,6 @@ export default function App() {
       showToast('고정비 정보가 수정되었습니다.');
       setEditingFeId(null);
     } else {
-      // 신규 추가 모드
       const newFe = {
         id: `fe-${Date.now()}`,
         name: feName,
@@ -230,20 +340,17 @@ export default function App() {
       showToast('새 고정비 항목이 추가되었습니다.');
     }
 
-    // 폼 초기화
     setFeName('');
     setFeAmount('');
     setFeDay(1);
   };
 
-  // 고정비 항목 삭제하기
   const handleDeleteFixedExpense = (id) => {
     if (confirm('이 고정비 항목을 정말 삭제하시겠습니까? 이번 달 가계부 내역에 이미 등록된 납부 기록도 연동 해제됩니다.')) {
       setFixedExpenses(prev => prev.filter(fe => fe.id !== id));
-      // 해당 고정비 연동 트랜잭션의 연동 ID 해제
       setTransactions(prev => prev.map(t => {
         if (t.fixedExpenseId === id) {
-          return { ...t, fixedExpenseId: undefined }; // 일반 지출로 변환
+          return { ...t, fixedExpenseId: undefined };
         }
         return t;
       }));
@@ -251,7 +358,6 @@ export default function App() {
     }
   };
 
-  // 고정비 항목 수정 폼 로드
   const startEditFixedExpense = (fe) => {
     setEditingFeId(fe.id);
     setFeName(fe.name);
@@ -259,12 +365,128 @@ export default function App() {
     setFeDay(fe.day);
   };
 
-  // 카테고리 자동 조정을 위한 타입 변경 이벤트
   const handleTypeChange = (type) => {
     setTxType(type);
     setTxCategory(CATEGORIES[type][0]);
   };
 
+  // 모달 내 비밀번호 업데이트 로직
+  const handleUpdateSecuritySettings = (e) => {
+    e.preventDefault();
+    if (newSecPin.length !== 4 || isNaN(newSecPin)) {
+      showToast('비밀번호는 숫자 4자리여야 합니다.');
+      return;
+    }
+    if (newSecPin !== confirmSecPin) {
+      showToast('비밀번호 확인이 일치하지 않습니다.');
+      return;
+    }
+    setAppPassword(newSecPin);
+    setNewSecPin('');
+    setConfirmSecPin('');
+    setSecurityTab('info');
+    showToast('비밀번호가 성공적으로 변경되었습니다.');
+  };
+
+  // 비밀번호 제거 (보안 잠금 완전 해제)
+  const handleDisableSecurity = () => {
+    if (confirm('잠금 기능을 해제하시겠습니까? 누구나 가계부를 열람할 수 있게 됩니다.')) {
+      setAppPassword('');
+      setIsLocked(false);
+      showToast('보안 잠금 기능이 비활성화되었습니다.');
+    }
+  };
+
+  // --- [잠금 화면 뷰] ---
+  if (isLocked) {
+    const isFirstTimeSetup = !appPassword;
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col justify-center items-center text-white px-4 font-sans select-none">
+        
+        {/* 브랜딩 */}
+        <div className="mb-8 text-center">
+          <div className="w-16 h-16 bg-emerald-500 rounded-2xl mx-auto flex items-center justify-center text-3xl shadow-lg shadow-emerald-900/30 mb-4 animate-pulse">
+            🔑
+          </div>
+          <h2 className="text-2xl font-black tracking-tight">젬의 스마트 가계부</h2>
+          <p className="text-xs text-slate-400 mt-1">
+            {isFirstTimeSetup ? '자산 보호를 위한 보안 잠금 설정' : '개인 금융 정보 보호 구역'}
+          </p>
+        </div>
+
+        {/* 잠금 유도 헤드라인 */}
+        <div className="text-center mb-8">
+          <h3 className="text-lg font-bold text-slate-200">
+            {isFirstTimeSetup 
+              ? (setupStep === 2 ? '설정할 PIN 번호 한 번 더 입력' : '신규 4자리 PIN 설정') 
+              : '보안 비밀번호 입력'
+            }
+          </h3>
+          <p className="text-xs text-slate-500 mt-1">
+            {isFirstTimeSetup 
+              ? '가계부 열람에 사용할 보안 코드 4자리를 정해 주세요.' 
+              : '가계부 조회를 위해 비밀번호 4자리를 입력해 주세요.'
+            }
+          </p>
+        </div>
+
+        {/* PIN 도트 표시기 */}
+        <div className={`flex justify-center gap-5 mb-12 ${pinError ? 'animate-shake' : ''}`}>
+          {[0, 1, 2, 3].map((index) => (
+            <div
+              key={index}
+              className={`w-4.5 h-4.5 rounded-full border-2 transition-all duration-150 ${
+                index < pinInput.length
+                  ? 'bg-emerald-400 border-emerald-400 scale-110 shadow-md shadow-emerald-400/50'
+                  : 'border-slate-600 bg-slate-800'
+              }`}
+            />
+          ))}
+        </div>
+
+        {/* 가상 숫자 키패드 (프리미엄 UI) */}
+        <div className="w-full max-w-xs grid grid-cols-3 gap-4 mb-6">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+            <button
+              key={num}
+              onClick={() => handleKeypadPress(String(num))}
+              className="h-16 rounded-full bg-slate-800/60 hover:bg-slate-700/80 active:scale-95 transition text-xl font-bold border border-slate-700/30 flex items-center justify-center"
+            >
+              {num}
+            </button>
+          ))}
+          
+          {/* 빈 공간 */}
+          <div className="flex items-center justify-center text-xs text-slate-500 font-semibold select-none">
+            숫자패드
+          </div>
+          
+          <button
+            onClick={() => handleKeypadPress('0')}
+            className="h-16 rounded-full bg-slate-800/60 hover:bg-slate-700/80 active:scale-95 transition text-xl font-bold border border-slate-700/30 flex items-center justify-center"
+          >
+            0
+          </button>
+          
+          <button
+            onClick={() => handleKeypadPress('back')}
+            className="h-16 rounded-full bg-slate-800/30 hover:bg-slate-700/50 active:scale-95 transition flex items-center justify-center text-slate-400 hover:text-white"
+            title="지우기"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414-6.414A2 2 0 0110.828 5H19a2 2 0 012 2v10a2 2 0 01-2 2h-8.172a2 2 0 01-1.414-.586L3 12z" />
+            </svg>
+          </button>
+        </div>
+
+        <p className="text-xs text-slate-600 mt-2">
+          키보드로 숫자키를 입력하여 해제할 수도 있습니다.
+        </p>
+      </div>
+    );
+  }
+
+  // --- [정상 가계부 메인 화면 뷰] ---
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans">
       {/* 알림 토스트 */}
@@ -290,7 +512,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             {/* 달 변경 셀렉터 */}
             <div className="flex items-center bg-slate-800 rounded-lg p-1">
               <button 
@@ -320,6 +542,17 @@ export default function App() {
               </button>
             </div>
 
+            {/* 수동 잠금 아이콘 */}
+            <button
+              onClick={handleLockApp}
+              className="p-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl transition-all border border-slate-700 hover:border-slate-500 flex items-center justify-center text-amber-400"
+              title="가계부 화면 즉시 잠금"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </button>
+
             {/* 고정비 설정 톱니바퀴 */}
             <button 
               onClick={() => {
@@ -328,11 +561,12 @@ export default function App() {
                 setFeName('');
                 setFeAmount('');
                 setFeDay(1);
+                setSecurityTab('info');
               }}
               className="p-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl transition-all border border-slate-700 hover:border-slate-500 flex items-center justify-center group"
-              title="고정비 관리 및 세팅"
+              title="설정 및 보안관리"
             >
-              <svg className="w-6 h-6 text-slate-300 group-hover:rotate-45 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-slate-300 group-hover:rotate-45 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
@@ -407,7 +641,7 @@ export default function App() {
         {/* 메인 레이아웃: 2열 구성 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* 왼쪽 컬럼 (2/3 영역): 이번 달 지출 스케줄 & 거래 등록/내역 */}
+          {/* 왼쪽 컬럼 (2/3 영역) */}
           <div className="lg:col-span-2 space-y-8">
             
             {/* 고정비 월간 스케줄 타임라인 */}
@@ -424,7 +658,7 @@ export default function App() {
                 </span>
               </div>
 
-              {/* 고정비 가로 스크롤 카드/리스트 */}
+              {/* 고정비 리스트 */}
               <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
                 {sortedFixedExpenses.map((fe) => {
                   const isPaid = !!paidFixedExpensesMap[fe.id];
@@ -440,7 +674,6 @@ export default function App() {
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        {/* 상태 체크박스 */}
                         <button 
                           onClick={() => handleToggleFixedPayment(fe)}
                           className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${
@@ -471,7 +704,6 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* 납부 토글 버튼 */}
                       <button
                         onClick={() => handleToggleFixedPayment(fe)}
                         className={`text-xs font-semibold px-4 py-2 rounded-xl border transition-all ${
@@ -555,7 +787,7 @@ export default function App() {
 
           </div>
 
-          {/* 오른쪽 컬럼 (1/3 영역): 지출/수입 등록 & 비주얼 분석 */}
+          {/* 오른쪽 컬럼 (1/3 영역) */}
           <div className="space-y-8">
             
             {/* 가계부 입력 폼 */}
@@ -565,8 +797,6 @@ export default function App() {
               </h2>
 
               <form onSubmit={handleAddTransaction} className="space-y-4">
-                
-                {/* 수입 / 지출 선택 버튼 */}
                 <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
                   <button
                     type="button"
@@ -592,7 +822,6 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* 카테고리 셀렉터 */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 mb-1.5">카테고리</label>
                   <select
@@ -606,7 +835,6 @@ export default function App() {
                   </select>
                 </div>
 
-                {/* 날짜 입력 */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 mb-1.5">날짜 선택</label>
                   <input
@@ -617,7 +845,6 @@ export default function App() {
                   />
                 </div>
 
-                {/* 금액 입력 */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 mb-1.5">금액 (원)</label>
                   <input
@@ -629,7 +856,6 @@ export default function App() {
                   />
                 </div>
 
-                {/* 상세 내역 */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 mb-1.5">내용 상세</label>
                   <input
@@ -657,8 +883,6 @@ export default function App() {
               </h2>
 
               <div className="space-y-4">
-                
-                {/* 고정비 납부 진척률 */}
                 <div>
                   <div className="flex justify-between text-xs font-semibold text-slate-500 mb-1">
                     <span>고정비 납부 완료도</span>
@@ -681,7 +905,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 지출 비율 (고정비 vs 변동비) */}
                 <div className="border-t border-slate-100 pt-4">
                   <span className="text-xs font-semibold text-slate-500 block mb-2">지출 성격 분포</span>
                   
@@ -728,7 +951,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* 고정비 설정 톱니바퀴 모달 */}
+      {/* 설정 및 고정비/보안설정 모달 */}
       {isSettingsOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl border border-slate-100 flex flex-col max-h-[85vh]">
@@ -737,9 +960,9 @@ export default function App() {
             <div className="p-5 border-b border-slate-100 flex justify-between items-center">
               <div>
                 <h3 className="text-lg font-bold text-slate-900 flex items-center gap-1.5">
-                  <span>⚙️</span> 고정비 리스트 설정 및 커스텀
+                  <span>⚙️</span> 가계부 환경설정 및 관리자 제어
                 </h3>
-                <p className="text-xs text-slate-500">매달 이체되는 고정비의 이름, 이체일, 금액을 커스텀하세요.</p>
+                <p className="text-xs text-slate-500">고정 지출 목록과 개인 자산 보호를 위한 보안 세팅을 변경합니다.</p>
               </div>
               <button 
                 onClick={() => setIsSettingsOpen(false)}
@@ -751,133 +974,239 @@ export default function App() {
               </button>
             </div>
 
-            {/* 모달 본문 - 스크롤 적용 */}
+            {/* 설정 서브 탭 분류 */}
+            <div className="flex border-b border-slate-100 bg-slate-50/50">
+              <button
+                onClick={() => setSecurityTab('info')}
+                className={`flex-1 py-3 text-sm font-bold border-b-2 transition ${
+                  securityTab === 'info' 
+                    ? 'border-indigo-600 text-indigo-600 bg-white' 
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                📋 고정 지출 리스트 설정
+              </button>
+              <button
+                onClick={() => setSecurityTab('change')}
+                className={`flex-1 py-3 text-sm font-bold border-b-2 transition ${
+                  securityTab === 'change' 
+                    ? 'border-indigo-600 text-indigo-600 bg-white' 
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                🔐 가계부 보안 비밀번호 관리
+              </button>
+            </div>
+
+            {/* 모달 본문 */}
             <div className="p-6 overflow-y-auto space-y-6 flex-1">
               
-              {/* 추가 및 수정 폼 */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
-                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-3">
-                  {editingFeId ? '✏️ 지정 고정비 수정하기' : '➕ 새로운 고정 지출 추가하기'}
-                </h4>
-                
-                <form onSubmit={handleAddFixedExpense} className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="md:col-span-1">
-                    <input
-                      type="text"
-                      placeholder="고정비 이름 (예: 정수기 렌탈)"
-                      value={feName}
-                      onChange={(e) => setFeName(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
-                    />
+              {/* 탭 1: 고정 지출 관리 영역 */}
+              {securityTab === 'info' && (
+                <>
+                  {/* 추가 및 수정 폼 */}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
+                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-3">
+                      {editingFeId ? '✏️ 지정 고정비 수정하기' : '➕ 새로운 고정 지출 추가하기'}
+                    </h4>
+                    
+                    <form onSubmit={handleAddFixedExpense} className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="md:col-span-1">
+                        <input
+                          type="text"
+                          placeholder="고정비 이름 (예: 정수기 렌탈)"
+                          value={feName}
+                          onChange={(e) => setFeName(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
+                        />
+                      </div>
+                      <div>
+                        <input
+                          type="number"
+                          placeholder="금액 (원 단위)"
+                          value={feAmount}
+                          onChange={(e) => setFeAmount(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          placeholder="이체일 (1~31일)"
+                          value={feDay}
+                          onChange={(e) => setFeDay(e.target.value)}
+                          min="1"
+                          max="31"
+                          className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
+                        />
+                        <button
+                          type="submit"
+                          className="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition"
+                        >
+                          {editingFeId ? '수정 완료' : '추가하기'}
+                        </button>
+                      </div>
+                    </form>
+                    
+                    {editingFeId && (
+                      <div className="mt-2 text-right">
+                        <button 
+                          type="button" 
+                          onClick={() => {
+                            setEditingFeId(null);
+                            setFeName('');
+                            setFeAmount('');
+                            setFeDay(1);
+                          }}
+                          className="text-xs text-rose-500 hover:underline"
+                        >
+                          수정 취소하고 신규 추가로 변경
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <input
-                      type="number"
-                      placeholder="금액 (원 단위)"
-                      value={feAmount}
-                      onChange={(e) => setFeAmount(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      placeholder="이체일 (1~31일)"
-                      value={feDay}
-                      onChange={(e) => setFeDay(e.target.value)}
-                      min="1"
-                      max="31"
-                      className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
-                    />
-                    <button
-                      type="submit"
-                      className="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition"
-                    >
-                      {editingFeId ? '수정 완료' : '추가하기'}
-                    </button>
-                  </div>
-                </form>
-                
-                {editingFeId && (
-                  <div className="mt-2 text-right">
-                    <button 
-                      type="button" 
-                      onClick={() => {
-                        setEditingFeId(null);
-                        setFeName('');
-                        setFeAmount('');
-                        setFeDay(1);
-                      }}
-                      className="text-xs text-rose-500 hover:underline"
-                    >
-                      수정 취소하고 신규 추가로 변경
-                    </button>
-                  </div>
-                )}
-              </div>
 
-              {/* 고정 지출 리스트 관리 테이블 */}
-              <div>
-                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">현재 고정 지출 리스트 ({fixedExpenses.length})</h4>
-                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-                  <table className="w-full text-left border-collapse text-sm">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 font-bold">
-                        <th className="p-3">항목명</th>
-                        <th className="p-3 text-right">예정 금액</th>
-                        <th className="p-3 text-center">이체 예정일</th>
-                        <th className="p-3 text-center">관리</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {fixedExpenses.map((fe) => (
-                        <tr key={fe.id} className="hover:bg-slate-50/50">
-                          <td className="p-3 font-semibold text-slate-800">{fe.name}</td>
-                          <td className="p-3 text-right font-bold text-indigo-600">{formatKRW(fe.amount)}</td>
-                          <td className="p-3 text-center text-slate-600 text-xs">
-                            {fe.day === 31 ? '매달 말일' : `매달 ${fe.day}일`}
-                          </td>
-                          <td className="p-3 text-center">
-                            <div className="flex justify-center gap-2">
-                              <button
-                                onClick={() => startEditFixedExpense(fe)}
-                                className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded"
-                                title="수정"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
-                              <button
-                                onClick={() => handleDeleteFixedExpense(fe.id)}
-                                className="p-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded"
-                                title="삭제"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {fixedExpenses.length === 0 && (
-                        <tr>
-                          <td colSpan="4" className="text-center py-8 text-slate-400 text-xs">
-                            등록된 고정 지출 항목이 존재하지 않습니다. 위의 폼에서 추가해 주세요!
-                          </td>
-                        </tr>
+                  {/* 고정 지출 목록 표 */}
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">현재 고정 지출 리스트 ({fixedExpenses.length})</h4>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                      <table className="w-full text-left border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 font-bold">
+                            <th className="p-3">항목명</th>
+                            <th className="p-3 text-right">예정 금액</th>
+                            <th className="p-3 text-center">이체 예정일</th>
+                            <th className="p-3 text-center">관리</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {fixedExpenses.map((fe) => (
+                            <tr key={fe.id} className="hover:bg-slate-50/50">
+                              <td className="p-3 font-semibold text-slate-800">{fe.name}</td>
+                              <td className="p-3 text-right font-bold text-indigo-600">{formatKRW(fe.amount)}</td>
+                              <td className="p-3 text-center text-slate-600 text-xs">
+                                {fe.day === 31 ? '매달 말일' : `매달 ${fe.day}일`}
+                              </td>
+                              <td className="p-3 text-center">
+                                <div className="flex justify-center gap-2">
+                                  <button
+                                    onClick={() => startEditFixedExpense(fe)}
+                                    className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded"
+                                    title="수정"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteFixedExpense(fe.id)}
+                                    className="p-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded"
+                                    title="삭제"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                          {fixedExpenses.length === 0 && (
+                            <tr>
+                              <td colSpan="4" className="text-center py-8 text-slate-400 text-xs">
+                                등록된 고정 지출 항목이 존재하지 않습니다. 위의 폼에서 추가해 주세요!
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* 탭 2: 보안 비밀번호 변경 관리 영역 */}
+              {securityTab === 'change' && (
+                <div className="space-y-6">
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200/60">
+                    <h4 className="text-sm font-bold text-slate-900 mb-1 flex items-center gap-1.5">
+                      <span>🔑</span> 보안 잠금 상태 정보
+                    </h4>
+                    <p className="text-xs text-slate-500 mb-4">
+                      비밀번호가 활성화되면 새로고침을 하거나 직접 잠금 버튼을 눌렀을 때 4자리 암호 키패드 인증을 거쳐야만 가계부를 열람할 수 있습니다.
+                    </p>
+
+                    <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200">
+                      <div>
+                        <span className="text-xs text-slate-400 block font-semibold">현재 보안 상태</span>
+                        <span className={`text-sm font-bold ${appPassword ? 'text-emerald-600' : 'text-slate-500'}`}>
+                          {appPassword ? '🟢 보안 비밀번호 사용 중' : '⚪ 보안 기능 비활성화 상태'}
+                        </span>
+                      </div>
+                      
+                      {appPassword && (
+                        <button
+                          type="button"
+                          onClick={handleDisableSecurity}
+                          className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-xl border border-rose-200 transition"
+                        >
+                          보안 해제(끄기)
+                        </button>
                       )}
-                    </tbody>
-                  </table>
+                    </div>
+                  </div>
+
+                  {/* 신규 등록 및 비밀번호 변경 폼 */}
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200/60">
+                    <h4 className="text-sm font-bold text-slate-900 mb-3">
+                      {appPassword ? '✏️ 비밀번호 번호 변경' : '➕ 보안 비밀번호 생성'}
+                    </h4>
+
+                    <form onSubmit={handleUpdateSecuritySettings} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1.5">신규 숫자 비밀번호 (4자리)</label>
+                        <input
+                          type="password"
+                          maxLength={4}
+                          pattern="[0-9]*"
+                          inputMode="numeric"
+                          placeholder="예: 1234"
+                          value={newSecPin}
+                          onChange={(e) => setNewSecPin(e.target.value.replace(/[^0-9]/g, ''))}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-mono tracking-widest text-center focus:outline-none focus:border-indigo-400"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1.5">신규 비밀번호 재확인 (4자리)</label>
+                        <input
+                          type="password"
+                          maxLength={4}
+                          pattern="[0-9]*"
+                          inputMode="numeric"
+                          placeholder="한번 더 입력"
+                          value={confirmSecPin}
+                          onChange={(e) => setConfirmSecPin(e.target.value.replace(/[^0-9]/g, ''))}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-mono tracking-widest text-center focus:outline-none focus:border-indigo-400"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-indigo-100"
+                      >
+                        {appPassword ? '보안 비밀번호 변경 완료' : '새로운 비밀번호 설정하기'}
+                      </button>
+                    </form>
+                  </div>
                 </div>
-              </div>
+              )}
 
             </div>
 
             {/* 모달 푸터 */}
             <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex justify-between items-center text-xs text-slate-500">
-              <span>수정한 설정은 즉시 현재 활성화된 가계부에 연동 및 적용됩니다.</span>
+              <span>수정한 모든 데이터는 로컬 저장소에 암호화 보존됩니다.</span>
               <button
                 onClick={() => setIsSettingsOpen(false)}
                 className="bg-slate-900 text-white font-bold px-4 py-2 rounded-xl text-xs hover:bg-slate-800 transition"
