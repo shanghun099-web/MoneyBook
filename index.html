@@ -2,27 +2,49 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>젬의 스마트 가계부</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
+<title>젬의 스마트 가계부 Pro</title>
+
+<!-- PWA / 모바일 웹앱 최적화 메타 태그 -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="젬 가계부">
+<link rel="apple-touch-icon" href="mybudget.png">
+<meta name="theme-color" content="#0f172a">
+
+<!-- 웹앱 매니페스트 (동적 인라인 구성 - 깃허브 배포 시 최적의 작동 제공) -->
+<link rel="manifest" href='data:application/json,{"name":"젬의 스마트 가계부 Pro","short_name":"젬 가계부","start_url":".","display":"standalone","background_color":"#0f172a","theme_color":"#0f172a","icons":[{"src":"mybudget.png","sizes":"192x192","type":"image/png"},{"src":"mybudget.png","sizes":"512x512","type":"image/png"}]}' />
+
+<!-- Tailwind CSS & Google Fonts -->
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<!-- Chart.js for Advanced Analytics -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <style>
-  body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+  body { 
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; 
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
   @keyframes shake { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-6px);} 75%{transform:translateX(6px);} }
   .animate-shake { animation: shake .2s ease-in-out 2; }
   @keyframes bounceSubtle { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-4px);} }
   .animate-bounce-subtle { animation: bounceSubtle 2s ease-in-out infinite; }
+  @keyframes slideUp { from{transform:translateY(100%); opacity:0;} to{transform:translateY(0); opacity:1;} }
+  .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+  
   ::-webkit-scrollbar { width:6px; height:6px; }
   ::-webkit-scrollbar-track { background:transparent; }
   ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:9999px; }
   ::-webkit-scrollbar-thumb:hover { background:#94a3b8; }
 </style>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen select-none">
+<body class="bg-slate-50 text-slate-800 min-h-screen select-none pb-safe">
 
 <!-- ================= 토스트 알림 ================= -->
 <div id="toast" class="fixed bottom-6 right-6 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
-  <span class="text-emerald-400">
+  <span id="toastIcon" class="text-emerald-400">
     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
@@ -32,22 +54,24 @@
 
 <!-- ================= 확인 모달 ================= -->
 <div id="confirmModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
-  <div class="bg-white rounded-3xl w-full max-w-sm shadow-2xl p-6 text-center border border-slate-100">
+  <div class="bg-white rounded-3xl w-full max-w-sm shadow-2xl p-6 text-center border border-slate-100 transform scale-95 transition-all duration-200">
     <div class="w-14 h-14 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl">⚠️</div>
     <h3 id="confirmTitle" class="text-lg font-black text-slate-900 tracking-tight">정말 삭제하시겠습니까?</h3>
     <p id="confirmMessage" class="text-xs text-slate-500 mt-1.5 mb-6 leading-relaxed">이 작업은 복구할 수 없습니다.</p>
     <div class="flex gap-3">
-      <button id="confirmCancelBtn" class="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition">취소</button>
-      <button id="confirmOkBtn" class="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs transition shadow-md">확인</button>
+      <button id="confirmCancelBtn" class="flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition">취소</button>
+      <button id="confirmOkBtn" class="flex-1 py-3.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs transition shadow-md">확인</button>
     </div>
   </div>
 </div>
 
 <!-- ================= 잠금 화면 ================= -->
-<div id="lockScreen" class="min-h-screen bg-slate-900 flex flex-col justify-center items-center text-white px-4 select-none hidden">
+<div id="lockScreen" class="min-h-screen bg-slate-900 flex flex-col justify-center items-center text-white px-4 select-none">
   <div class="mb-8 text-center">
-    <div class="w-16 h-16 bg-emerald-500 rounded-2xl mx-auto flex items-center justify-center text-3xl shadow-lg shadow-emerald-900/30 mb-4 animate-pulse">🔑</div>
-    <h2 class="text-2xl font-black tracking-tight">젬의 스마트 가계부</h2>
+    <div class="w-16 h-16 bg-gradient-to-tr from-emerald-400 to-teal-600 rounded-2xl mx-auto flex items-center justify-center text-3xl shadow-lg shadow-emerald-900/30 mb-4 animate-pulse overflow-hidden">
+      <img id="lockAppIcon" src="mybudget.png" alt="🔒" class="w-full h-full object-cover">
+    </div>
+    <h2 class="text-2xl font-black tracking-tight">젬의 스마트 가계부 Pro</h2>
     <p id="lockSubtitle" class="text-xs text-slate-400 mt-1">개인 금융 정보 보호 구역</p>
   </div>
   <div class="text-center mb-8">
@@ -84,33 +108,40 @@
 <!-- ================= 메인 화면 ================= -->
 <div id="mainApp" class="hidden">
   <header class="sticky top-0 bg-slate-900 text-white shadow-md z-40">
-    <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-      <div class="flex items-center gap-3">
-        <div class="bg-emerald-500 text-slate-900 font-black p-2.5 rounded-xl shadow-inner text-lg">📊</div>
+    <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 bg-slate-800 rounded-xl overflow-hidden shadow-inner flex items-center justify-center">
+          <img src="mybudget.png" id="headerAppIcon" alt="📊" class="w-full h-full object-cover">
+        </div>
         <div>
-          <h1 class="text-xl font-bold tracking-tight">젬의 스마트 가계부</h1>
-          <p class="text-xs text-slate-400">계획적인 자산 흐름과 맞춤형 고정비 케어</p>
+          <h1 class="text-base font-bold tracking-tight flex items-center gap-1.5">
+            젬의 스마트 가계부 Pro
+            <span id="syncStatusBadge" class="text-[9px] px-1.5 py-0.5 rounded-full font-semibold transition-all duration-300">
+              인증 중...
+            </span>
+          </h1>
+          <p class="text-[10px] text-slate-400">자산 흐름 & 클라우드 동기화</p>
         </div>
       </div>
-      <div class="flex items-center gap-2 md:gap-3">
-        <div class="flex items-center bg-slate-800 rounded-lg p-1">
-          <button id="prevMonthBtn" class="p-1.5 md:p-2 hover:bg-slate-700 rounded-md transition text-xs md:text-sm">◀</button>
-          <span id="currentMonthLabel" class="px-2 md:px-3 text-xs md:text-sm font-bold tracking-wide whitespace-nowrap">2026년 06월</span>
-          <button id="nextMonthBtn" class="p-1.5 md:p-2 hover:bg-slate-700 rounded-md transition text-xs md:text-sm">▶</button>
+      <div class="flex items-center gap-1.5">
+        <div class="flex items-center bg-slate-800 rounded-lg p-0.5">
+          <button id="prevMonthBtn" class="p-1.5 hover:bg-slate-700 rounded-md transition text-xs">◀</button>
+          <span id="currentMonthLabel" class="px-1.5 text-xs font-bold tracking-wide whitespace-nowrap">2026년 06월</span>
+          <button id="nextMonthBtn" class="p-1.5 hover:bg-slate-700 rounded-md transition text-xs">▶</button>
         </div>
-        <button id="installBtn" class="p-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all border border-indigo-500 hover:border-indigo-400 flex items-center justify-center text-white font-semibold text-xs md:text-sm gap-1.5">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <button id="installBtn" class="p-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-all border border-indigo-500 flex items-center justify-center text-white font-bold text-xs gap-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
           </svg>
-          <span class="hidden md:inline">앱 추가</span>
+          <span class="hidden md:inline">설치</span>
         </button>
-        <button id="lockBtn" class="p-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl transition-all border border-slate-700 hover:border-slate-500 flex items-center justify-center text-amber-400" title="화면 잠금">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <button id="lockBtn" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition-all border border-slate-700 flex items-center justify-center text-amber-400" title="화면 잠금">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
         </button>
-        <button id="settingsBtn" class="p-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl transition-all border border-slate-700 hover:border-slate-500 flex items-center justify-center group" title="가계부 환경설정">
-          <svg class="w-5 h-5 text-slate-300 group-hover:rotate-45 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <button id="settingsBtn" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition-all border border-slate-700 flex items-center justify-center group" title="가계부 환경설정">
+          <svg class="w-4 h-4 text-slate-300 group-hover:rotate-45 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
@@ -119,116 +150,135 @@
     </div>
   </header>
 
-  <main class="max-w-7xl mx-auto px-4 py-8">
+  <main class="max-w-7xl mx-auto px-4 py-6">
     <!-- 통계 카드 -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-      <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 flex items-center justify-between">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex items-center justify-between hover:shadow-md transition">
         <div>
-          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">이번 달 수입</p>
-          <h3 id="statIncome" class="text-2xl font-bold text-emerald-600">₩ 0</h3>
+          <p class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">이번 달 수입</p>
+          <h3 id="statIncome" class="text-base md:text-xl font-black text-emerald-600">₩ 0</h3>
         </div>
-        <div class="p-3 bg-emerald-50 rounded-xl text-emerald-600">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+        <div class="p-2 bg-emerald-50 rounded-lg text-emerald-600 hidden sm:block">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
         </div>
       </div>
-      <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 flex items-center justify-between">
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex items-center justify-between hover:shadow-md transition">
         <div>
-          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">이번 달 지출</p>
-          <h3 id="statExpense" class="text-2xl font-bold text-rose-600">₩ 0</h3>
+          <p class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">이번 달 지출</p>
+          <h3 id="statExpense" class="text-base md:text-xl font-black text-rose-600">₩ 0</h3>
         </div>
-        <div class="p-3 bg-rose-50 rounded-xl text-rose-600">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0v-8m0 8l-8-8-4 4-6-6" /></svg>
+        <div class="p-2 bg-rose-50 rounded-lg text-rose-600 hidden sm:block">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0v-8m0 8l-8-8-4 4-6-6" /></svg>
         </div>
       </div>
-      <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 flex items-center justify-between">
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex items-center justify-between hover:shadow-md transition">
         <div>
-          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">당월 자산 잔액</p>
-          <h3 id="statBalance" class="text-2xl font-bold text-slate-800">₩ 0</h3>
+          <p class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">당월 자산 잔액</p>
+          <h3 id="statBalance" class="text-base md:text-xl font-black text-slate-800">₩ 0</h3>
         </div>
-        <div id="balanceIconContainer" class="p-3 bg-slate-100 text-slate-700 rounded-xl">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        <div id="balanceIconContainer" class="p-2 bg-slate-100 text-slate-700 rounded-lg hidden sm:block">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
         </div>
       </div>
-      <div class="bg-slate-900 text-white rounded-2xl p-6 shadow-lg flex flex-col justify-between relative overflow-hidden">
-        <div class="absolute top-0 right-0 p-6 opacity-10">
-          <svg class="w-24 h-24 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+      <div class="bg-slate-900 text-white rounded-2xl p-4 shadow-lg flex flex-col justify-between relative overflow-hidden hover:shadow-xl transition col-span-2 sm:col-span-1">
+        <div class="absolute top-0 right-0 p-4 opacity-10">
+          <svg class="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
         </div>
         <div>
-          <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">남은 고정 지출액</p>
-          <h3 id="statUnpaidFixed" class="text-2xl font-black text-amber-400">₩ 0</h3>
+          <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">남은 고정 지출액</p>
+          <h3 id="statUnpaidFixed" class="text-base md:text-xl font-black text-amber-400">₩ 0</h3>
         </div>
-        <div id="statTotalFixedPlanned" class="text-xs text-slate-400 mt-3">총 계획 고정비: ₩ 0</div>
+        <div id="statTotalFixedPlanned" class="text-[10px] text-slate-400 mt-2 font-medium">총 계획: ₩ 0</div>
       </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      <div class="lg:col-span-2 space-y-8">
-        <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80">
-          <div class="flex justify-between items-center mb-5">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2 space-y-6">
+        <!-- 고정 지출 타임라인 -->
+        <div class="bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-200/80">
+          <div class="flex justify-between items-center mb-4">
             <div class="flex items-center gap-2">
               <span class="text-xl">📅</span>
-              <h2 id="fixedExpensesHeader" class="text-lg font-bold text-slate-900">0월 고정비 이체 및 납부 타임라인</h2>
+              <h2 id="fixedExpensesHeader" class="text-base font-bold text-slate-900">0월 고정비 이체 및 납부 타임라인</h2>
             </div>
-            <span id="plannedFixedCountBadge" class="text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-full font-semibold">계획 0건</span>
+            <span id="plannedFixedCountBadge" class="text-[10px] bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-semibold">계획 0건</span>
           </div>
-          <div id="fixedTimelineContainer" class="space-y-3 max-h-[480px] overflow-y-auto pr-1"></div>
+          <div id="fixedTimelineContainer" class="space-y-2.5 max-h-[400px] overflow-y-auto pr-1"></div>
         </div>
 
-        <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80">
-          <div class="flex justify-between items-center mb-5">
+        <!-- 소비/지출 리스트 -->
+        <div class="bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-200/80">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
             <div class="flex items-center gap-2">
-              <span class="text-xl font-bold">📝</span>
-              <h2 class="text-lg font-bold text-slate-900">이번 달 가계부 소비/지출 리스트</h2>
+              <span class="text-xl">📝</span>
+              <h2 class="text-base font-bold text-slate-900">이번 달 가계부 소비/지출 리스트</h2>
             </div>
-            <span id="transactionCountBadge" class="text-xs text-slate-500">총 0건 기록됨</span>
+            <div class="flex flex-wrap items-center gap-2">
+              <input type="text" id="txSearch" placeholder="내역 검색..." class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-indigo-400 w-full sm:w-40">
+              <select id="txFilterType" class="bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400">
+                <option value="all">전체</option>
+                <option value="expense">지출</option>
+                <option value="income">수입</option>
+              </select>
+              <span id="transactionCountBadge" class="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-semibold">총 0건</span>
+            </div>
           </div>
-          <div id="transactionListContainer" class="divide-y divide-slate-100 max-h-[500px] overflow-y-auto pr-2"></div>
+          <div id="transactionListContainer" class="divide-y divide-slate-100 max-h-[400px] overflow-y-auto pr-2"></div>
         </div>
       </div>
 
-      <div class="space-y-8">
-        <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80">
-          <h2 class="text-base font-bold text-slate-900 mb-4 flex items-center gap-1.5"><span>➕</span> 가계부 소비 및 소득 기록</h2>
-          <form id="transactionForm" class="space-y-4">
+      <!-- 우측 입력 및 분석 사이드 바 -->
+      <div class="space-y-6">
+        <!-- 거래 기록 추가 폼 -->
+        <div class="bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-200/80">
+          <h2 class="text-base font-bold text-slate-900 mb-3.5 flex items-center gap-1.5"><span>➕</span> 가계부 소비 및 소득 기록</h2>
+          <form id="transactionForm" class="space-y-3.5">
             <div class="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
-              <button type="button" id="txTypeExpense" data-type="expense" class="txTypeBtn py-2 rounded-lg text-sm font-semibold transition-all bg-slate-900 text-white shadow-sm">지출</button>
-              <button type="button" id="txTypeIncome" data-type="income" class="txTypeBtn py-2 rounded-lg text-sm font-semibold transition-all text-slate-500 hover:text-slate-800">수입</button>
+              <button type="button" id="txTypeExpense" data-type="expense" class="txTypeBtn py-2 rounded-lg text-xs font-bold transition-all bg-slate-900 text-white shadow-sm">지출</button>
+              <button type="button" id="txTypeIncome" data-type="income" class="txTypeBtn py-2 rounded-lg text-xs font-bold transition-all text-slate-500 hover:text-slate-800">수입</button>
             </div>
             <div>
-              <label class="block text-xs font-semibold text-slate-500 mb-1.5">카테고리</label>
-              <select id="txCategory" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-slate-400"></select>
+              <label class="block text-[10px] font-semibold text-slate-500 mb-1">카테고리</label>
+              <select id="txCategory" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-slate-400"></select>
             </div>
             <div>
-              <label class="block text-xs font-semibold text-slate-500 mb-1.5">날짜 선택</label>
-              <input type="date" id="txDate" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-slate-400" required>
+              <label class="block text-[10px] font-semibold text-slate-500 mb-1">날짜 선택</label>
+              <input type="date" id="txDate" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-slate-400" required>
             </div>
             <div>
-              <label class="block text-xs font-semibold text-slate-500 mb-1.5">금액 (원)</label>
-              <input type="number" id="txAmount" placeholder="예: 50000" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-slate-400" required>
+              <label class="block text-[10px] font-semibold text-slate-500 mb-1">금액 (원)</label>
+              <input type="number" id="txAmount" placeholder="예: 50000" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-slate-400" required>
             </div>
             <div>
-              <label class="block text-xs font-semibold text-slate-500 mb-1.5">내용 상세</label>
-              <input type="text" id="txDescription" placeholder="예: 이마트 장보기, 스타벅스 커피 등" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-slate-400" required>
+              <label class="block text-[10px] font-semibold text-slate-500 mb-1">내용 상세</label>
+              <input type="text" id="txDescription" placeholder="예: 이마트 장보기 등" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-slate-400" required>
             </div>
-            <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition shadow-md shadow-indigo-200">거래 내역 등록하기</button>
+            <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-indigo-200">거래 내역 등록하기</button>
           </form>
         </div>
 
-        <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80">
-          <h2 class="text-base font-bold text-slate-900 mb-4 flex items-center gap-1.5"><span>📈</span> 이번 달 소비 구조 분석</h2>
+        <!-- 소비 구조 분석 -->
+        <div class="bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-200/80">
+          <h2 class="text-base font-bold text-slate-900 mb-3.5 flex items-center gap-1.5"><span>📈</span> 이번 달 소비 구조 분석</h2>
           <div class="space-y-4">
             <div>
-              <div class="flex justify-between text-xs font-semibold text-slate-500 mb-1">
+              <div class="flex justify-between text-[10px] font-semibold text-slate-500 mb-1">
                 <span>고정비 납부 완료도</span>
-                <span id="fixedPayProgressLabel" class="text-indigo-600">0 / 0 건</span>
+                <span id="fixedPayProgressLabel" class="text-indigo-600 font-bold">0 / 0 건</span>
               </div>
-              <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+              <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                 <div id="fixedPayProgressBar" class="bg-indigo-600 h-full transition-all duration-500" style="width: 0%"></div>
               </div>
             </div>
-            <div class="border-t border-slate-100 pt-4">
-              <span class="text-xs font-semibold text-slate-500 block mb-2">지출 성격 분포</span>
-              <div id="chartContainer"></div>
+            <div class="border-t border-slate-100 pt-3">
+              <span class="text-[10px] font-semibold text-slate-500 block mb-2">지출 구성 비율 분포</span>
+              
+              <!-- Chart.js Canvas -->
+              <div class="relative w-full h-40 flex justify-center items-center">
+                <canvas id="categoryChart"></canvas>
+              </div>
+
+              <div id="chartSummaryContainer" class="mt-3 pt-3 border-t border-slate-100"></div>
             </div>
           </div>
         </div>
@@ -241,83 +291,99 @@
     <div class="bg-white rounded-2xl w-full max-w-2xl shadow-2xl border border-slate-100 flex flex-col max-h-[85vh]">
       <div class="p-5 border-b border-slate-100 flex justify-between items-center">
         <div>
-          <h3 class="text-lg font-bold text-slate-900 flex items-center gap-1.5"><span>⚙️</span> 가계부 환경설정 및 관리자 제어</h3>
-          <p class="text-xs text-slate-500">고정 지출 목록과 개인 자산 보호를 위한 보안 세팅을 변경합니다.</p>
+          <h3 class="text-base font-bold text-slate-900 flex items-center gap-1.5"><span>⚙️</span> 환경설정 및 보안 제어</h3>
+          <p class="text-[10px] text-slate-500">고정 지출 및 개인 자산 보안 설정을 관리합니다.</p>
         </div>
         <button id="closeSettingsBtn" class="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
       </div>
       <div class="flex border-b border-slate-100 bg-slate-50/50">
-        <button id="tabBtnInfo" data-tab="info" class="settingsTabBtn flex-1 py-3 text-sm font-bold border-b-2 transition border-indigo-600 text-indigo-600 bg-white">📋 고정 지출 리스트 설정</button>
-        <button id="tabBtnChange" data-tab="change" class="settingsTabBtn flex-1 py-3 text-sm font-bold border-b-2 transition border-transparent text-slate-500 hover:text-slate-800">🔐 가계부 보안 비밀번호 관리</button>
+        <button id="tabBtnInfo" data-tab="info" class="settingsTabBtn flex-1 py-3 text-xs font-bold border-b-2 transition border-indigo-600 text-indigo-600 bg-white">📋 고정 지출 설정</button>
+        <button id="tabBtnChange" data-tab="change" class="settingsTabBtn flex-1 py-3 text-xs font-bold border-b-2 transition border-transparent text-slate-500 hover:text-slate-800">🔐 가계부 PIN 암호 관리</button>
       </div>
-      <div id="settingsModalContent" class="p-6 overflow-y-auto space-y-6 flex-1"></div>
-      <div class="p-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex justify-between items-center text-xs text-slate-500">
-        <span>수정한 모든 설정은 데이터 무결성을 위해 동기화 보존됩니다.</span>
-        <button id="closeSettingsBtn2" class="bg-slate-900 text-white font-bold px-4 py-2 rounded-xl text-xs hover:bg-slate-800 transition">닫기</button>
+      <div id="settingsModalContent" class="p-5 overflow-y-auto space-y-5 flex-1"></div>
+      <div class="p-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex justify-between items-center text-[10px] text-slate-500">
+        <span>클라우드 동기화 시스템 작동 중</span>
+        <button id="closeSettingsBtn2" class="bg-slate-900 text-white font-bold px-3 py-1.5 rounded-lg text-[10px] hover:bg-slate-800 transition">닫기</button>
       </div>
     </div>
   </div>
 
-  <!-- ================= 설치 안내 모달 ================= -->
+  <!-- ================= 모바일 커스텀 홈화면 설치 유도 하단 모달 배너 ================= -->
+  <div id="pwaInstallBanner" class="fixed bottom-0 inset-x-0 bg-slate-900/95 backdrop-blur-md text-white border-t border-slate-800 p-4 pb-safe hidden z-50 animate-slide-up shadow-2xl">
+    <div class="max-w-md mx-auto flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-xl overflow-hidden shadow border border-slate-700 bg-slate-800 shrink-0">
+          <img src="mybudget.png" alt="젬 스마트 가계부" class="w-full h-full object-cover">
+        </div>
+        <div>
+          <h4 class="text-sm font-bold text-slate-100">젬의 스마트 가계부 Pro</h4>
+          <p id="pwaInstruction" class="text-[11px] text-slate-400 mt-0.5">앱으로 추가해 홈화면에서 매일 편리하게 조회하세요!</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="pwaInstallTriggerBtn" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition whitespace-nowrap shadow-md">
+          앱 추가
+        </button>
+        <button id="pwaCloseBtn" class="text-slate-400 hover:text-slate-200 p-1.5" title="닫기">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 설치 가이드 서브 모달 (iOS 사파리 전용) ================= -->
   <div id="installModal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-md hidden items-center justify-center p-4 z-50">
-    <div class="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-slate-100 p-6 relative overflow-hidden animate-bounce-subtle">
-      <button id="closeInstallBtn" class="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition">
+    <div class="bg-white rounded-3xl w-full max-w-sm shadow-2xl border border-slate-100 p-5 relative overflow-hidden animate-bounce-subtle">
+      <button id="closeInstallBtn" class="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
       </button>
       <div class="text-center mt-3">
-        <div class="relative inline-block mb-4">
-          <img id="appIconImage" src="mybudget.png" alt="가계부 아이콘" class="w-20 h-20 rounded-2xl mx-auto shadow-md border border-slate-100 object-cover">
-          <span class="absolute -bottom-1.5 -right-1.5 bg-indigo-600 text-white p-1 rounded-full text-xs shadow">📲</span>
+        <div class="relative inline-block mb-3">
+          <img id="appIconImage" src="mybudget.png" alt="가계부 아이콘" class="w-16 h-16 rounded-2xl mx-auto shadow border border-slate-100 object-cover">
+          <span class="absolute -bottom-1 -right-1 bg-indigo-600 text-white p-1 rounded-full text-[10px] shadow">📲</span>
         </div>
-        <h3 class="text-lg font-black text-slate-900 tracking-tight">젬의 가계부 홈 화면에 추가</h3>
-        <p class="text-xs text-slate-500 mt-1 mb-6">매일 모바일 앱터치 한 번으로 간편하게 가계부를 조회하세요!</p>
-        <div class="space-y-4 text-left">
-          <div class="p-3 bg-slate-50 rounded-2xl border border-slate-200/50">
-            <h4 class="text-xs font-bold text-slate-700 flex items-center gap-1.5 mb-2"><span class="text-sm">🍎</span> iPhone (Safari 브라우저)</h4>
-            <ol class="text-xs text-slate-500 list-decimal pl-4.5 space-y-1 font-medium">
-              <li>하단 네비게이션 중앙의 <strong class="text-slate-800">공유(내보내기) 📤</strong> 버튼을 누릅니다.</li>
-              <li>팝업 메뉴 중 <strong class="text-indigo-600">홈 화면에 추가</strong> 메뉴를 탭합니다.</li>
-              <li>이름을 입력하고 우측 상단 <strong class="text-slate-800">추가</strong>를 클릭하면 단축 앱이 생깁니다!</li>
+        <h3 class="text-base font-black text-slate-900 tracking-tight">홈 화면에 바로가기 앱 추가</h3>
+        <p class="text-xs text-slate-500 mt-1 mb-4 leading-normal">모바일 앱터치 한 번으로 간편하게 가계부를 실행하세요!</p>
+        <div class="space-y-3 text-left">
+          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/50">
+            <h4 class="text-xs font-bold text-slate-700 flex items-center gap-1.5 mb-1.5"><span class="text-sm">🍎</span> iPhone (Safari 전용 가이드)</h4>
+            <ol class="text-[11px] text-slate-500 list-decimal pl-4.5 space-y-1 font-medium">
+              <li>하단 툴바의 <strong class="text-slate-800">공유(내보내기) 버튼 📤</strong>을 터치합니다.</li>
+              <li>화면을 아래로 내려 <strong class="text-indigo-600">홈 화면에 추가</strong> 메뉴를 탭합니다.</li>
+              <li>우측 상단 <strong class="text-slate-800">추가</strong>를 클릭하면 완성됩니다!</li>
             </ol>
           </div>
-          <div class="p-3 bg-slate-50 rounded-2xl border border-slate-200/50">
-            <h4 class="text-xs font-bold text-slate-700 flex items-center gap-1.5 mb-2"><span class="text-sm">🤖</span> Android (Chrome / 삼성 인터넷)</h4>
-            <ol class="text-xs text-slate-500 list-decimal pl-4.5 space-y-1 font-medium">
-              <li>우측 상단 혹은 하단의 <strong class="text-slate-800">더보기(점 3개 ⋮ 또는 줄 3개 ☰)</strong>를 누릅니다.</li>
-              <li><strong class="text-indigo-600">앱 설치</strong> 또는 <strong class="text-indigo-600">홈 화면에 추가</strong>를 선택해 주세요.</li>
-              <li>바탕화면 단축 아이콘 설치를 허용하면 생성이 마쳐집니다!</li>
+          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/50">
+            <h4 class="text-xs font-bold text-slate-700 flex items-center gap-1.5 mb-1.5"><span class="text-sm">🤖</span> Android (크롬/삼성브라우저)</h4>
+            <ol class="text-[11px] text-slate-500 list-decimal pl-4.5 space-y-1 font-medium">
+              <li>우측 메뉴 <strong class="text-slate-800">(⋮ 또는 ☰)</strong>를 클릭합니다.</li>
+              <li><strong class="text-indigo-600">앱 설치</strong> 또는 <strong class="text-indigo-600">홈 화면에 추가</strong>를 탭해 주세요.</li>
             </ol>
           </div>
         </div>
-        <button id="closeInstallBtn2" class="w-full mt-6 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-bold transition shadow-md">가이드 확인 완료</button>
+        <button id="closeInstallBtn2" class="w-full mt-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow-md">이해했습니다</button>
       </div>
     </div>
   </div>
 </div>
 
-<script>
-/* =======================================================================
-   젬의 스마트 가계부 — 메인 스크립트
-   구성:
-     1. CONFIG / CONSTANTS   - 고정 데이터, 카테고리
-     2. STORE                - localStorage 입출력 전담
-     3. STATE                - 앱 전역 상태
-     4. SELECTORS / UTILS    - DOM 헬퍼, 포맷 함수, 토스트/컨펌
-     5. SECURITY (PIN)       - 잠금화면 로직
-     6. TRANSACTIONS         - 거래 내역 CRUD
-     7. FIXED EXPENSES       - 고정비 CRUD
-     8. RENDER               - 화면 그리기 (잠금/메인/모달)
-     9. EVENT BINDING        - 이벤트 리스너 연결 (최초 1회)
-     10. INIT                - 앱 시작
-   ======================================================================= */
+<!-- ================= Firebase & Core Scripts (ES Module) ================= -->
+<script type="module">
+// Firebase SDK 임포트
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-/* ---------- 1. CONFIG / CONSTANTS ---------- */
+/* ---------- 1. CONFIG & DEFAULT DATA ---------- */
+const APP_NAME = "gem_smart_budget_pro";
 const STORAGE_KEYS = {
-  fixedExpenses: 'gem_fixed_expenses',
-  transactions: 'gem_transactions',
-  password: 'gem_app_password'
+  fixedExpenses: `${APP_NAME}_fixed_expenses`,
+  transactions: `${APP_NAME}_transactions`,
+  password: `${APP_NAME}_app_password`
 };
 
 const DEFAULT_FIXED_EXPENSES = [
@@ -333,8 +399,9 @@ const DEFAULT_FIXED_EXPENSES = [
 
 const DEFAULT_TRANSACTIONS = [
   { id: 't-mock-1', type: 'income', category: '주수입', amount: 3500000, date: '2026-06-01', description: '월급 입금' },
-  { id: 't-mock-2', type: 'expense', category: '식비', amount: 12500, date: '2026-06-02', description: '점심 식사' },
-  { id: 't-mock-3', type: 'expense', category: '교통비', amount: 55000, date: '2026-06-03', description: '교통카드 충전' }
+  { id: 't-mock-2', type: 'expense', category: '식비', amount: 12500, date: '2026-06-12', description: '점심 식사' },
+  { id: 't-mock-3', type: 'expense', category: '교통비', amount: 55000, date: '2026-06-15', description: '교통카드 충전' },
+  { id: 't-mock-4', type: 'expense', category: '식비', amount: 34000, date: '2026-06-22', description: '퇴근 후 저녁 식사' }
 ];
 
 const CATEGORIES = {
@@ -342,7 +409,167 @@ const CATEGORIES = {
   expense: ['고정비', '식비', '교통비', '쇼핑/문화', '생활용품', '경조사', '기타지출']
 };
 
-/* ---------- 2. STORE (localStorage 전담) ---------- */
+/* ---------- 2. STATE MANAGEMENT ---------- */
+const state = {
+  fixedExpenses: [],
+  transactions: [],
+  appPassword: '',
+  isLocked: true,
+  pinInput: '',
+  setupStep: 0,        
+  tempNewPin: '',
+  currentMonth: '2026-06',
+  txType: 'expense',
+  txSearchQuery: '',
+  txFilterType: 'all',
+  editingFeId: null,
+  securityTab: 'info',
+  deferredPrompt: null,
+  
+  // Cloud Sync State
+  isCloudMode: false,
+  currentUser: null,
+  db: null,
+  auth: null,
+  appId: 'default-app-id'
+};
+
+// Global Chart Instance
+let myDoughnutChart = null;
+
+/* ---------- 3. FIREBASE SETUP (Mandatory Rules 1, 2, 3) ---------- */
+async function setupFirebase() {
+  const syncBadge = document.getElementById('syncStatusBadge');
+  try {
+    if (typeof __firebase_config === 'undefined' || !__firebase_config) {
+      throw new Error("No Firebase Config detected");
+    }
+    
+    const firebaseConfig = JSON.parse(__firebase_config);
+    const app = initializeApp(firebaseConfig);
+    state.auth = getAuth(app);
+    state.db = getFirestore(app);
+    state.appId = typeof __app_id !== 'undefined' ? __app_id : 'gem-budget-app';
+    
+    let userCredential;
+    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+      userCredential = await signInWithCustomToken(state.auth, __initial_auth_token);
+    } else {
+      userCredential = await signInAnonymously(state.auth);
+    }
+    
+    state.currentUser = userCredential.user;
+    state.isCloudMode = true;
+    
+    syncBadge.innerText = "☁️ 실시간 클라우드";
+    syncBadge.className = "text-[9px] px-1.5 py-0.5 rounded-full font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+    
+    await syncInitialUserData();
+    
+  } catch (error) {
+    console.warn("Firebase Initializing failed. Falling back to LocalStorage:", error);
+    state.isCloudMode = false;
+    syncBadge.innerText = "💾 오프라인 로컬";
+    syncBadge.className = "text-[9px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30";
+    
+    state.fixedExpenses = Store.loadFixedExpenses();
+    state.transactions = Store.loadTransactions();
+    state.appPassword = Store.loadPassword();
+    
+    afterDataLoaded();
+  }
+}
+
+async function syncInitialUserData() {
+  const userId = state.currentUser.uid;
+  const appId = state.appId;
+  const db = state.db;
+  
+  const fixedExpensesRef = doc(db, 'artifacts', appId, 'users', userId, 'config', 'fixedExpenses');
+  const passwordRef = doc(db, 'artifacts', appId, 'users', userId, 'config', 'password');
+  const transactionsRef = doc(db, 'artifacts', appId, 'users', userId, 'config', 'transactions');
+
+  // Load Password
+  const pwSnap = await getDoc(passwordRef);
+  if (pwSnap.exists()) {
+    state.appPassword = pwSnap.data().password || '';
+  } else {
+    state.appPassword = Store.loadPassword();
+    await setDoc(passwordRef, { password: state.appPassword });
+  }
+
+  // Load Fixed Expenses
+  const feSnap = await getDoc(fixedExpensesRef);
+  if (feSnap.exists()) {
+    state.fixedExpenses = feSnap.data().list || [];
+  } else {
+    const localFe = Store.loadFixedExpenses();
+    state.fixedExpenses = localFe.length > 0 ? localFe : DEFAULT_FIXED_EXPENSES;
+    await setDoc(fixedExpensesRef, { list: state.fixedExpenses });
+  }
+
+  // Load Transactions
+  const txSnap = await getDoc(transactionsRef);
+  if (txSnap.exists()) {
+    state.transactions = txSnap.data().list || [];
+  } else {
+    const localTx = Store.loadTransactions();
+    state.transactions = localTx.length > 0 ? localTx : DEFAULT_TRANSACTIONS;
+    await setDoc(transactionsRef, { list: state.transactions });
+  }
+
+  // Listeners
+  onSnapshot(fixedExpensesRef, (snapshot) => {
+    if (snapshot.exists()) {
+      state.fixedExpenses = snapshot.data().list || [];
+      renderAll();
+    }
+  }, (err) => console.error("Fixed Expenses sync error: ", err));
+
+  onSnapshot(transactionsRef, (snapshot) => {
+    if (snapshot.exists()) {
+      state.transactions = snapshot.data().list || [];
+      renderAll();
+    }
+  }, (err) => console.error("Transactions sync error: ", err));
+
+  onSnapshot(passwordRef, (snapshot) => {
+    if (snapshot.exists()) {
+      state.appPassword = snapshot.data().password || '';
+    }
+  }, (err) => console.error("Password sync error: ", err));
+
+  afterDataLoaded();
+}
+
+async function saveCloudData(field) {
+  if (!state.isCloudMode || !state.currentUser) return;
+  const userId = state.currentUser.uid;
+  
+  try {
+    if (field === 'fixedExpenses') {
+      const ref = doc(state.db, 'artifacts', state.appId, 'users', userId, 'config', 'fixedExpenses');
+      await setDoc(ref, { list: state.fixedExpenses });
+    } else if (field === 'transactions') {
+      const ref = doc(state.db, 'artifacts', state.appId, 'users', userId, 'config', 'transactions');
+      await setDoc(ref, { list: state.transactions });
+    } else if (field === 'password') {
+      const ref = doc(state.db, 'artifacts', state.appId, 'users', userId, 'config', 'password');
+      await setDoc(ref, { password: state.appPassword });
+    }
+  } catch (err) {
+    console.error("Cloud saving error: ", err);
+    showToast("⚠️ 실시간 클라우드 저장 실패");
+  }
+}
+
+function afterDataLoaded() {
+  state.isLocked = true;
+  state.setupStep = state.appPassword ? 0 : 1;
+  renderAll();
+}
+
+/* ---------- 4. STORAGE FALLBACKS ---------- */
 const Store = {
   loadFixedExpenses() {
     const raw = localStorage.getItem(STORAGE_KEYS.fixedExpenses);
@@ -350,6 +577,7 @@ const Store = {
   },
   saveFixedExpenses(list) {
     localStorage.setItem(STORAGE_KEYS.fixedExpenses, JSON.stringify(list));
+    saveCloudData('fixedExpenses');
   },
   loadTransactions() {
     const raw = localStorage.getItem(STORAGE_KEYS.transactions);
@@ -357,35 +585,22 @@ const Store = {
   },
   saveTransactions(list) {
     localStorage.setItem(STORAGE_KEYS.transactions, JSON.stringify(list));
+    saveCloudData('transactions');
   },
   loadPassword() {
     return localStorage.getItem(STORAGE_KEYS.password) || '';
   },
   savePassword(pw) {
     localStorage.setItem(STORAGE_KEYS.password, pw);
+    saveCloudData('password');
   },
   clearPassword() {
     localStorage.removeItem(STORAGE_KEYS.password);
+    saveCloudData('password');
   }
 };
 
-/* ---------- 3. STATE ---------- */
-const state = {
-  fixedExpenses: [],
-  transactions: [],
-  appPassword: '',
-  isLocked: true,
-  pinInput: '',
-  setupStep: 0,       // 0: 일반 / 1: 신규PIN 입력 / 2: 신규PIN 재확인
-  tempNewPin: '',
-  currentMonth: '2026-06',
-  txType: 'expense',
-  editingFeId: null,
-  securityTab: 'info', // 'info' | 'change'
-  deferredPrompt: null
-};
-
-/* ---------- 4. SELECTORS / UTILS ---------- */
+/* ---------- 5. UTILITIES ---------- */
 const $ = (id) => document.getElementById(id);
 
 function formatKRW(val) {
@@ -410,14 +625,18 @@ function showConfirm(title, message, onOk) {
   $('confirmTitle').innerText = title;
   $('confirmMessage').innerText = message;
   activeConfirmCallback = onOk;
-  $('confirmModal').className = "fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50";
+  const modal = $('confirmModal');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
 }
 function closeConfirm() {
-  $('confirmModal').className = "fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-4 z-50";
+  const modal = $('confirmModal');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
   activeConfirmCallback = null;
 }
 
-/* ---------- 5. SECURITY (PIN) ---------- */
+/* ---------- 6. SECURITY ---------- */
 function handleKeypad(val) {
   const pinDotsEl = $('pinDots');
   pinDotsEl.classList.remove('animate-shake');
@@ -455,7 +674,6 @@ function verifyPinProcess() {
   state.pinInput = '';
 
   if (!state.appPassword) {
-    // 최초 PIN 설정 흐름
     if (state.setupStep === 1) {
       state.tempNewPin = input;
       state.setupStep = 2;
@@ -469,18 +687,17 @@ function verifyPinProcess() {
         state.isLocked = false;
         state.setupStep = 0;
         updatePinDots();
-        showToast('보안 비밀번호가 성공적으로 설정되었습니다!');
+        showToast('보안 비밀번호가 설정되었습니다!');
         renderAll();
       } else {
         triggerPinShake();
         state.setupStep = 1;
         updatePinDots();
-        showToast('비밀번호가 일치하지 않습니다. 다시 설정하세요.');
+        showToast('비밀번호가 다릅니다. 다시 설정하세요.');
         renderLockScreenText();
       }
     }
   } else {
-    // 일반 잠금 해제 흐름
     if (input === state.appPassword) {
       state.isLocked = false;
       updatePinDots();
@@ -489,7 +706,7 @@ function verifyPinProcess() {
     } else {
       triggerPinShake();
       updatePinDots();
-      showToast('비밀번호가 올바르지 않습니다.');
+      showToast('비밀번호가 일치하지 않습니다.');
     }
   }
 }
@@ -506,7 +723,7 @@ function renderLockScreenText() {
       desc.innerText = '가계부 열람에 사용할 보안 코드 4자리를 정해 주세요.';
     } else {
       title.innerText = '설정할 PIN 번호 한 번 더 입력';
-      desc.innerText = '정상 설정 확인을 위해 한 번 더 PIN 입력을 거칩니다.';
+      desc.innerText = '동일하게 한 번 더 입력하여 정상 작동 여부를 검증합니다.';
     }
   } else {
     subtitle.innerText = '개인 금융 정보 보호 구역';
@@ -539,7 +756,7 @@ function handleUpdateSecuritySettings(e) {
 
   state.appPassword = pin1;
   Store.savePassword(pin1);
-  showToast('가계부 잠금 비밀번호가 성공적으로 변경되었습니다.');
+  showToast('가계부 잠금 비밀번호가 변경되었습니다.');
   setSecurityTab('info');
 }
 
@@ -558,15 +775,15 @@ function handleDisableSecurity() {
   );
 }
 
-/* ---------- 6. TRANSACTIONS ---------- */
+/* ---------- 7. TRANSACTIONS & MEMORY FILTER ---------- */
 function setTxType(type) {
   state.txType = type;
   $('txTypeExpense').className = type === 'expense'
-    ? "txTypeBtn py-2 rounded-lg text-sm font-semibold transition-all bg-slate-900 text-white shadow-sm"
-    : "txTypeBtn py-2 rounded-lg text-sm font-semibold transition-all text-slate-500 hover:text-slate-800";
+    ? "txTypeBtn py-2 rounded-lg text-xs font-bold transition-all bg-slate-900 text-white shadow-sm"
+    : "txTypeBtn py-2 rounded-lg text-xs font-bold transition-all text-slate-500 hover:text-slate-800";
   $('txTypeIncome').className = type === 'income'
-    ? "txTypeBtn py-2 rounded-lg text-sm font-semibold transition-all bg-slate-900 text-white shadow-sm"
-    : "txTypeBtn py-2 rounded-lg text-sm font-semibold transition-all text-slate-500 hover:text-slate-800";
+    ? "txTypeBtn py-2 rounded-lg text-xs font-bold transition-all bg-slate-900 text-white shadow-sm"
+    : "txTypeBtn py-2 rounded-lg text-xs font-bold transition-all text-slate-500 hover:text-slate-800";
   populateCategoryDropdown();
 }
 
@@ -596,12 +813,14 @@ function handleAddTransaction(e) {
   if (!amount || amount <= 0) { showToast('올바른 금액을 입력해 주세요.'); return; }
   if (!desc) { showToast('내역 상세 설명을 적어주세요.'); return; }
 
-  state.transactions.unshift({
+  const newTx = {
     id: `t-${Date.now()}`,
     type: state.txType,
     category, amount, date,
     description: desc
-  });
+  };
+
+  state.transactions.unshift(newTx);
   Store.saveTransactions(state.transactions);
 
   amountInput.value = '';
@@ -627,7 +846,7 @@ function handleToggleFixedPayment(feId) {
   const fe = state.fixedExpenses.find(f => f.id === feId);
   if (!fe) return;
 
-  const monthlyTx = getMonthlyTransactions();
+  const monthlyTx = getFilteredMonthlyTransactions(true); 
   const paidTx = monthlyTx.find(t => t.fixedExpenseId === feId);
 
   if (paidTx) {
@@ -653,8 +872,24 @@ function handleToggleFixedPayment(feId) {
   renderAll();
 }
 
-function getMonthlyTransactions() {
-  return state.transactions.filter(t => t.date.startsWith(state.currentMonth));
+function getFilteredMonthlyTransactions(bypassFilters = false) {
+  let list = state.transactions.filter(t => t.date.startsWith(state.currentMonth));
+  
+  if (bypassFilters) return list;
+
+  if (state.txSearchQuery) {
+    const query = state.txSearchQuery.toLowerCase();
+    list = list.filter(t => 
+      t.description.toLowerCase().includes(query) || 
+      t.category.toLowerCase().includes(query)
+    );
+  }
+
+  if (state.txFilterType !== 'all') {
+    list = list.filter(t => t.type === state.txFilterType);
+  }
+
+  return list.sort((a, b) => b.date.localeCompare(a.date));
 }
 
 function changeMonth(diff) {
@@ -667,7 +902,7 @@ function changeMonth(diff) {
   renderAll();
 }
 
-/* ---------- 7. FIXED EXPENSES ---------- */
+/* ---------- 8. FIXED EXPENSES ---------- */
 function handleAddFixedExpense(e) {
   e.preventDefault();
   const nameVal = $('newFeName').value.trim();
@@ -734,7 +969,55 @@ function cancelEditFixedExpense() {
   renderSettingsModalContent();
 }
 
-/* ---------- 8. RENDER ---------- */
+/* ---------- 9. PREMIUM CHARTS (Chart.js) ---------- */
+function updateCategoryChart(categoriesMap) {
+  const ctx = $('categoryChart').getContext('2d');
+  
+  const labels = Object.keys(categoriesMap);
+  const dataValues = Object.values(categoriesMap);
+
+  if (myDoughnutChart) {
+    myDoughnutChart.destroy();
+  }
+
+  if (labels.length === 0) {
+    return;
+  }
+
+  const colors = ['#6366f1', '#f43f5e', '#0ea5e9', '#10b981', '#f59e0b', '#8b5cf6', '#64748b'];
+
+  myDoughnutChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: dataValues,
+        backgroundColor: colors.slice(0, labels.length),
+        borderWidth: 2,
+        borderColor: '#ffffff',
+        hoverOffset: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const val = context.raw || 0;
+              return ` ${context.label}: ${formatKRW(val)}`;
+            }
+          }
+        }
+      },
+      cutout: '72%'
+    }
+  });
+}
+
+/* ---------- 10. REAL-TIME RENDERING ---------- */
 function renderAll() {
   if (state.isLocked) {
     $('lockScreen').classList.remove('hidden');
@@ -750,16 +1033,19 @@ function renderAll() {
   $('currentMonthLabel').innerText = `${y}년 ${m}월`;
   $('fixedExpensesHeader').innerText = `${parseInt(m, 10)}월 고정비 이체 및 납부 타임라인`;
 
-  const monthlyTx = getMonthlyTransactions();
+  const monthlyRawTx = getFilteredMonthlyTransactions(true); 
   const paidFixedMap = {};
-  monthlyTx.forEach(t => { if (t.fixedExpenseId) paidFixedMap[t.fixedExpenseId] = t; });
+  monthlyRawTx.forEach(t => { if (t.fixedExpenseId) paidFixedMap[t.fixedExpenseId] = t; });
 
-  const totals = calcMonthlyTotals(monthlyTx);
+  const totals = calcMonthlyTotals(monthlyRawTx);
   renderStatCards(totals, paidFixedMap);
   populateCategoryDropdown();
   renderFixedTimeline(paidFixedMap);
-  renderTransactionList(monthlyTx);
-  renderAnalysis(totals, paidFixedMap);
+  
+  const filteredTx = getFilteredMonthlyTransactions(false);
+  renderTransactionList(filteredTx);
+  
+  renderAnalysis(totals, monthlyRawTx, paidFixedMap);
 }
 
 function calcMonthlyTotals(monthlyTx) {
@@ -784,17 +1070,17 @@ function renderStatCards(totals, paidFixedMap) {
   const balanceVal = totalIncome - totalExpense;
   const statBalanceEl = $('statBalance');
   statBalanceEl.innerText = formatKRW(balanceVal);
-  statBalanceEl.className = balanceVal >= 0 ? "text-2xl font-bold text-slate-800" : "text-2xl font-bold text-rose-500";
+  statBalanceEl.className = balanceVal >= 0 ? "text-base md:text-xl font-black text-slate-800" : "text-base md:text-xl font-black text-rose-500";
   $('balanceIconContainer').className = balanceVal >= 0
-    ? "p-3 bg-slate-100 text-slate-700 rounded-xl"
-    : "p-3 bg-rose-50 text-rose-600 rounded-xl";
+    ? "p-2 bg-slate-100 text-slate-700 rounded-lg hidden sm:block"
+    : "p-2 bg-rose-50 text-rose-600 rounded-lg hidden sm:block";
 
   const totalFixedPlanned = state.fixedExpenses.reduce((sum, f) => sum + f.amount, 0);
   const unpaidFixedPlanned = state.fixedExpenses.reduce(
     (sum, f) => sum + (paidFixedMap[f.id] ? 0 : f.amount), 0
   );
   $('statUnpaidFixed').innerText = formatKRW(unpaidFixedPlanned);
-  $('statTotalFixedPlanned').innerText = `총 계획 고정비: ${formatKRW(totalFixedPlanned)}`;
+  $('statTotalFixedPlanned').innerText = `총 계획: ${formatKRW(totalFixedPlanned)}`;
 }
 
 function renderFixedTimeline(paidFixedMap) {
@@ -804,33 +1090,33 @@ function renderFixedTimeline(paidFixedMap) {
   $('plannedFixedCountBadge').innerText = `계획 ${sortedFE.length}건`;
 
   if (sortedFE.length === 0) {
-    container.innerHTML = `<div class="text-center py-10 border-2 border-dashed border-slate-200 rounded-xl text-slate-400">등록된 고정비가 없습니다. 우측 상단 톱니바퀴를 눌러 추가해 보세요!</div>`;
+    container.innerHTML = `<div class="text-center py-10 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-xs">등록된 고정비가 없습니다. 우측 상단 톱니바퀴를 눌러 추가해 보세요!</div>`;
     return;
   }
 
   sortedFE.forEach(fe => {
     const isPaid = !!paidFixedMap[fe.id];
-    const dDayText = fe.day === 31 ? '매달 말일' : `매월 ${fe.day}일`;
+    const dDayText = fe.day === 31 ? '말일' : `${fe.day}일`;
 
     const card = document.createElement('div');
-    card.className = `flex items-center justify-between p-4 rounded-xl border transition-all ${
+    card.className = `flex items-center justify-between p-3 rounded-xl border transition-all ${
       isPaid ? 'bg-slate-50 border-slate-200 opacity-75' : 'bg-white border-slate-200 hover:border-indigo-200 hover:shadow-sm'
     }`;
     card.innerHTML = `
-      <div class="flex items-center gap-3">
-        <button class="fixedToggleBtn w-6 h-6 rounded-lg flex items-center justify-center transition-all ${isPaid ? 'bg-indigo-600 text-white' : 'border-2 border-slate-300 hover:border-slate-400'}" data-fe-id="${fe.id}">
-          ${isPaid ? `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg>` : ''}
+      <div class="flex items-center gap-2.5">
+        <button class="fixedToggleBtn w-5.5 h-5.5 rounded-lg flex items-center justify-center transition-all ${isPaid ? 'bg-indigo-600 text-white' : 'border-2 border-slate-300 hover:border-slate-400'}" data-fe-id="${fe.id}">
+          ${isPaid ? `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg>` : ''}
         </button>
         <div>
-          <p class="font-semibold text-sm ${isPaid ? 'line-through text-slate-500' : 'text-slate-800'}">${fe.name}</p>
-          <div class="flex gap-2 items-center mt-1">
-            <span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">${dDayText}</span>
-            <span class="text-xs font-bold text-indigo-600">${formatKRW(fe.amount)}</span>
+          <p class="font-bold text-xs ${isPaid ? 'line-through text-slate-500' : 'text-slate-800'}">${fe.name}</p>
+          <div class="flex gap-1.5 items-center mt-0.5">
+            <span class="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">${dDayText}</span>
+            <span class="text-[11px] font-bold text-indigo-600">${formatKRW(fe.amount)}</span>
           </div>
         </div>
       </div>
-      <button class="fixedToggleBtn text-xs font-semibold px-4 py-2 rounded-xl border transition-all ${isPaid ? 'bg-slate-200 border-slate-300 text-slate-600 hover:bg-slate-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'}" data-fe-id="${fe.id}">
-        ${isPaid ? '납부 취소' : '납부 완료'}
+      <button class="fixedToggleBtn text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all ${isPaid ? 'bg-slate-200 border-slate-300 text-slate-600 hover:bg-slate-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'}" data-fe-id="${fe.id}">
+        ${isPaid ? '취소' : '납부'}
       </button>
     `;
     container.appendChild(card);
@@ -841,40 +1127,42 @@ function renderFixedTimeline(paidFixedMap) {
   });
 }
 
-function renderTransactionList(monthlyTx) {
+function renderTransactionList(filteredTx) {
   const container = $('transactionListContainer');
   container.innerHTML = '';
-  $('transactionCountBadge').innerText = `총 ${monthlyTx.length}건 기록됨`;
+  $('transactionCountBadge').innerText = `총 ${filteredTx.length}건`;
 
-  if (monthlyTx.length === 0) {
+  if (filteredTx.length === 0) {
     container.innerHTML = `
-      <div class="text-center py-12 text-slate-400">
-        <p class="text-sm">기록된 가계부 내역이 아직 없어요.</p>
-        <p class="text-xs mt-1">오른쪽 폼을 작성하거나 고정비를 납부해 보세요!</p>
+      <div class="text-center py-10 text-slate-400">
+        <p class="text-xs font-semibold">조건에 맞는 가계부 내역이 존재하지 않습니다.</p>
       </div>`;
     return;
   }
 
-  monthlyTx.forEach(t => {
+  filteredTx.forEach(t => {
     let catColor = "bg-rose-50 text-rose-600";
     if (t.type === 'income') catColor = "bg-emerald-50 text-emerald-600";
     else if (t.category === '고정비') catColor = "bg-indigo-50 text-indigo-600";
 
     const row = document.createElement('div');
-    row.className = "py-3.5 flex items-center justify-between group";
+    row.className = "py-3 flex items-center justify-between group";
     row.innerHTML = `
-      <div class="flex items-center gap-3">
-        <div class="p-2.5 rounded-xl text-sm font-bold ${catColor}">${t.category}</div>
+      <div class="flex items-center gap-2.5">
+        <div class="p-2 rounded-lg text-[10px] font-bold ${catColor}">${t.category}</div>
         <div>
-          <p class="font-semibold text-slate-800 text-sm">${t.description}</p>
-          <p class="text-xs text-slate-400 font-medium mt-0.5">${t.date}</p>
+          <p class="font-bold text-slate-800 text-xs flex items-center gap-1">
+            ${t.description}
+            ${t.fixedExpenseId ? '<span class="text-[8px] bg-indigo-50 text-indigo-500 font-bold px-1 rounded">고정</span>' : ''}
+          </p>
+          <p class="text-[10px] text-slate-400 font-medium mt-0.5">${t.date}</p>
         </div>
       </div>
-      <div class="flex items-center gap-4">
-        <span class="font-bold text-sm ${t.type === 'income' ? 'text-emerald-600' : 'text-slate-800'}">
+      <div class="flex items-center gap-3">
+        <span class="font-bold text-xs ${t.type === 'income' ? 'text-emerald-600' : 'text-slate-800'}">
           ${t.type === 'income' ? '+' : '-'}${t.amount.toLocaleString()}원
         </span>
-        <button class="deleteTxBtn p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition-all" data-tx-id="${t.id}" title="기록삭제">
+        <button class="deleteTxBtn p-1 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-all" data-tx-id="${t.id}" title="기록삭제">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
         </button>
       </div>
@@ -887,8 +1175,8 @@ function renderTransactionList(monthlyTx) {
   });
 }
 
-function renderAnalysis(totals, paidFixedMap) {
-  const { totalExpense, fixedSpent, variableSpent } = totals;
+function renderAnalysis(totals, monthlyRawTx, paidFixedMap) {
+  const { totalExpense } = totals;
   const paidFixedCount = Object.keys(paidFixedMap).length;
   const totalFixedCount = state.fixedExpenses.length;
 
@@ -896,36 +1184,57 @@ function renderAnalysis(totals, paidFixedMap) {
   const progressPercent = totalFixedCount > 0 ? (paidFixedCount / totalFixedCount) * 100 : 0;
   $('fixedPayProgressBar').style.width = `${progressPercent}%`;
 
-  const chartWrapper = $('chartContainer');
+  const chartSummaryWrapper = $('chartSummaryContainer');
+
   if (totalExpense <= 0) {
-    chartWrapper.innerHTML = `<div class="text-center py-4 text-xs text-slate-400 bg-slate-50 rounded-xl">지출 기록이 생기면 분석 데이터가 표기됩니다.</div>`;
+    chartSummaryWrapper.innerHTML = `<div class="text-center py-4 text-xs text-slate-400 bg-slate-50 rounded-xl">지출 기록이 존재하지 않습니다.</div>`;
+    if (myDoughnutChart) {
+      myDoughnutChart.destroy();
+    }
     return;
   }
 
-  const fixedPct = Math.round((fixedSpent / totalExpense) * 100);
-  const variablePct = Math.round((variableSpent / totalExpense) * 100);
+  const expenseCategoriesMap = {};
+  monthlyRawTx.forEach(t => {
+    if (t.type === 'expense') {
+      expenseCategoriesMap[t.category] = (expenseCategoriesMap[t.category] || 0) + t.amount;
+    }
+  });
 
-  chartWrapper.innerHTML = `
-    <div class="space-y-2">
-      <div class="flex h-6 rounded-lg overflow-hidden text-[10px] text-white font-bold">
-        <div class="bg-indigo-500 flex items-center justify-center transition-all duration-500" style="width: ${fixedPct}%">${fixedSpent > 0 ? `${fixedPct}%` : ''}</div>
-        <div class="bg-rose-400 flex items-center justify-center transition-all duration-500" style="width: ${variablePct}%">${variableSpent > 0 ? `${variablePct}%` : ''}</div>
+  updateCategoryChart(expenseCategoriesMap);
+
+  let legendHtml = `<div class="grid grid-cols-1 gap-1.5 text-xs">`;
+  const sortedCategories = Object.entries(expenseCategoriesMap).sort((a, b) => b[1] - a[1]);
+  
+  const colors = ['bg-indigo-500', 'bg-rose-400', 'bg-sky-400', 'bg-emerald-400', 'bg-amber-400', 'bg-violet-400', 'bg-slate-400'];
+
+  sortedCategories.forEach(([categoryName, totalAmt], idx) => {
+    const pct = Math.round((totalAmt / totalExpense) * 100);
+    const colorClass = colors[idx % colors.length];
+    
+    legendHtml += `
+      <div class="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded-lg transition">
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full ${colorClass} inline-block"></span>
+          <span class="font-bold text-slate-700 text-[11px]">${categoryName}</span>
+          <span class="text-[9px] text-slate-400 font-bold">${pct}%</span>
+        </div>
+        <span class="font-bold text-slate-800 text-[11px]">${formatKRW(totalAmt)}</span>
       </div>
-      <div class="flex justify-between text-xs mt-1">
-        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 bg-indigo-500 rounded-full inline-block"></span><span class="text-slate-600">고정 지출: ${formatKRW(fixedSpent)}</span></div>
-        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 bg-rose-400 rounded-full inline-block"></span><span class="text-slate-600">변동 지출: ${formatKRW(variableSpent)}</span></div>
-      </div>
-    </div>`;
+    `;
+  });
+  legendHtml += `</div>`;
+  chartSummaryWrapper.innerHTML = legendHtml;
 }
 
 function setSecurityTab(tab) {
   state.securityTab = tab;
   $('tabBtnInfo').className = tab === 'info'
-    ? "settingsTabBtn flex-1 py-3 text-sm font-bold border-b-2 transition border-indigo-600 text-indigo-600 bg-white"
-    : "settingsTabBtn flex-1 py-3 text-sm font-bold border-b-2 transition border-transparent text-slate-500 hover:text-slate-800";
+    ? "settingsTabBtn flex-1 py-3 text-xs font-bold border-b-2 transition border-indigo-600 text-indigo-600 bg-white"
+    : "settingsTabBtn flex-1 py-3 text-xs font-bold border-b-2 transition border-transparent text-slate-500 hover:text-slate-800";
   $('tabBtnChange').className = tab === 'change'
-    ? "settingsTabBtn flex-1 py-3 text-sm font-bold border-b-2 transition border-indigo-600 text-indigo-600 bg-white"
-    : "settingsTabBtn flex-1 py-3 text-sm font-bold border-b-2 transition border-transparent text-slate-500 hover:text-slate-800";
+    ? "settingsTabBtn flex-1 py-3 text-xs font-bold border-b-2 transition border-indigo-600 text-indigo-600 bg-white"
+    : "settingsTabBtn flex-1 py-3 text-xs font-bold border-b-2 transition border-transparent text-slate-500 hover:text-slate-800";
   renderSettingsModalContent();
 }
 
@@ -942,38 +1251,34 @@ function renderSettingsModalContent() {
 
 function buildFixedExpenseSettingsSection() {
   const section = document.createElement('div');
-  section.className = "space-y-6";
+  section.className = "space-y-4";
   section.innerHTML = `
-    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
-      <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wide mb-3">
-        ${state.editingFeId ? '✏️ 지정 고정비 수정하기' : '➕ 새로운 고정 지출 추가하기'}
+    <div class="bg-slate-50 p-3 rounded-xl border border-slate-200/60">
+      <h4 class="text-[10px] font-bold text-slate-700 uppercase tracking-wide mb-2">
+        ${state.editingFeId ? '✏️ 고정비 수정' : '➕ 고정 지출 추가'}
       </h4>
-      <form id="fixedExpenseForm" class="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div class="md:col-span-1">
-          <input id="newFeName" type="text" placeholder="고정비 이름 (예: 정수기 렌탈)" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" required>
+      <form id="fixedExpenseForm" class="flex flex-col gap-2">
+        <input id="newFeName" type="text" placeholder="항목명 (예: 렌트카)" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-400" required>
+        <div class="grid grid-cols-2 gap-2">
+          <input id="newFeAmount" type="number" placeholder="금액 (원)" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-400" required>
+          <input id="newFeDay" type="number" placeholder="예정일 (1~31일)" min="1" max="31" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-400" required>
         </div>
-        <div>
-          <input id="newFeAmount" type="number" placeholder="금액 (원 단위)" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" required>
-        </div>
-        <div class="flex gap-2">
-          <input id="newFeDay" type="number" placeholder="이체일 (1~31일)" min="1" max="31" class="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" required>
-          <button type="submit" class="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition">
-            ${state.editingFeId ? '수정 완료' : '추가하기'}
-          </button>
-        </div>
+        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-xs font-bold transition">
+          ${state.editingFeId ? '수정 완료' : '추가하기'}
+        </button>
       </form>
-      ${state.editingFeId ? `<div class="mt-2 text-right"><button type="button" id="cancelEditFeBtn" class="text-xs text-rose-500 hover:underline">수정 취소하고 신규 추가로 변경</button></div>` : ''}
+      ${state.editingFeId ? `<div class="mt-1.5 text-right"><button type="button" id="cancelEditFeBtn" class="text-[10px] text-rose-500 hover:underline">수정 취소</button></div>` : ''}
     </div>
     <div>
-      <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">현재 고정 지출 리스트 (${state.fixedExpenses.length})</h4>
-      <div class="border border-slate-200 rounded-xl overflow-hidden bg-white">
-        <table class="w-full text-left border-collapse text-sm">
+      <h4 class="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">현재 고정 지출 리스트 (${state.fixedExpenses.length})</h4>
+      <div class="border border-slate-200 rounded-xl overflow-hidden bg-white overflow-x-auto">
+        <table class="w-full text-left border-collapse text-xs">
           <thead>
-            <tr class="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 font-bold">
-              <th class="p-3">항목명</th>
-              <th class="p-3 text-right">예정 금액</th>
-              <th class="p-3 text-center">이체 예정일</th>
-              <th class="p-3 text-center">관리</th>
+            <tr class="bg-slate-50 border-b border-slate-200 text-[10px] text-slate-500 font-bold">
+              <th class="p-2">항목명</th>
+              <th class="p-2 text-right">예정 금액</th>
+              <th class="p-2 text-center">예정일</th>
+              <th class="p-2 text-center">관리</th>
             </tr>
           </thead>
           <tbody id="fixedExpensesTableBody" class="divide-y divide-slate-100"></tbody>
@@ -982,30 +1287,28 @@ function buildFixedExpenseSettingsSection() {
     </div>
   `;
 
-  // 폼 제출 / 취소 버튼 바인딩
   section.querySelector('#fixedExpenseForm').addEventListener('submit', handleAddFixedExpense);
   const cancelBtn = section.querySelector('#cancelEditFeBtn');
   if (cancelBtn) cancelBtn.addEventListener('click', cancelEditFixedExpense);
 
-  // 테이블 본문 채우기
   const tbody = section.querySelector('#fixedExpensesTableBody');
   if (state.fixedExpenses.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" class="text-center py-8 text-slate-400 text-xs">등록된 고정 지출 항목이 존재하지 않습니다. 위의 폼에서 추가해 주세요!</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center py-6 text-slate-400 text-xs">고정 지출 항목이 없습니다.</td></tr>`;
   } else {
     state.fixedExpenses.forEach(fe => {
       const tr = document.createElement('tr');
       tr.className = "hover:bg-slate-50/50";
       tr.innerHTML = `
-        <td class="p-3 font-semibold text-slate-800">${fe.name}</td>
-        <td class="p-3 text-right font-bold text-indigo-600">${formatKRW(fe.amount)}</td>
-        <td class="p-3 text-center text-slate-600 text-xs">${fe.day === 31 ? '매달 말일' : `매달 ${fe.day}일`}</td>
-        <td class="p-3 text-center">
-          <div class="flex justify-center gap-2">
-            <button class="editFeBtn p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded" data-fe-id="${fe.id}" title="수정">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+        <td class="p-2 font-bold text-slate-800">${fe.name}</td>
+        <td class="p-2 text-right font-black text-indigo-600">${formatKRW(fe.amount)}</td>
+        <td class="p-2 text-center text-slate-600 text-[10px]">${fe.day === 31 ? '말일' : `${fe.day}일`}</td>
+        <td class="p-2 text-center">
+          <div class="flex justify-center gap-1.5">
+            <button class="editFeBtn p-1 text-slate-500 hover:text-indigo-600" data-fe-id="${fe.id}">
+              ✏️
             </button>
-            <button class="deleteFeBtn p-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded" data-fe-id="${fe.id}" title="삭제">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            <button class="deleteFeBtn p-1 text-slate-500 hover:text-rose-600" data-fe-id="${fe.id}">
+              🗑️
             </button>
           </div>
         </td>
@@ -1021,34 +1324,28 @@ function buildFixedExpenseSettingsSection() {
 
 function buildSecuritySettingsSection() {
   const section = document.createElement('div');
-  section.className = "space-y-6";
+  section.className = "space-y-4";
   section.innerHTML = `
-    <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200/60">
-      <h4 class="text-sm font-bold text-slate-900 mb-1 flex items-center gap-1.5"><span>🔑</span> 보안 잠금 상태 정보</h4>
-      <p class="text-xs text-slate-500 mb-4">비밀번호가 활성화되면 새로고침을 하거나 직접 잠금 버튼을 눌렀을 때 4자리 암호 키패드 인증을 거쳐야만 가계부를 열람할 수 있습니다.</p>
-      <div class="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200">
+    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
+      <h4 class="text-xs font-bold text-slate-900 mb-1">🔑 보안 잠금 상태</h4>
+      <p class="text-[10px] text-slate-500 mb-3">암호가 활성화되면 앱 구동 및 잠금 터치 시 자산 조회가 통제됩니다.</p>
+      <div class="flex items-center justify-between bg-white p-3 rounded-lg border border-slate-200">
         <div>
-          <span class="text-xs text-slate-400 block font-semibold">현재 보안 상태</span>
-          <span class="text-sm font-bold ${state.appPassword ? 'text-emerald-600' : 'text-slate-500'}">
-            ${state.appPassword ? '🟢 보안 비밀번호 사용 중' : '⚪ 보안 기능 비활성화 상태'}
+          <span class="text-[10px] text-slate-400 block font-semibold">현재 상태</span>
+          <span class="text-xs font-bold ${state.appPassword ? 'text-emerald-600' : 'text-slate-500'}">
+            ${state.appPassword ? '🟢 비밀번호 잠금 사용 중' : '⚪ 잠금장치 꺼짐'}
           </span>
         </div>
-        ${state.appPassword ? `<button type="button" id="disableSecurityBtn" class="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-xl border border-rose-200 transition">보안 해제(끄기)</button>` : ''}
+        ${state.appPassword ? `<button type="button" id="disableSecurityBtn" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[10px] rounded-lg border border-rose-200 transition">잠금 해제</button>` : ''}
       </div>
     </div>
-    <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200/60">
-      <h4 class="text-sm font-bold text-slate-900 mb-3">${state.appPassword ? '✏️ 비밀번호 변경' : '➕ 보안 비밀번호 생성'}</h4>
-      <form id="securityForm" class="space-y-4">
-        <div>
-          <label class="block text-xs font-semibold text-slate-500 mb-1.5">신규 숫자 비밀번호 (4자리)</label>
-          <input id="newSecPin" type="password" maxlength="4" pattern="[0-9]*" inputmode="numeric" placeholder="예: 1234" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-mono tracking-widest text-center focus:outline-none focus:border-indigo-400" required>
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-slate-500 mb-1.5">신규 비밀번호 재확인 (4자리)</label>
-          <input id="confirmSecPin" type="password" maxlength="4" pattern="[0-9]*" inputmode="numeric" placeholder="한번 더 입력" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-mono tracking-widest text-center focus:outline-none focus:border-indigo-400" required>
-        </div>
-        <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-indigo-100">
-          ${state.appPassword ? '보안 비밀번호 변경 완료' : '새로운 비밀번호 설정하기'}
+    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
+      <h4 class="text-xs font-bold text-slate-900 mb-2.5">${state.appPassword ? '✏️ 비밀번호 변경' : '➕ 비밀번호 신규 등록'}</h4>
+      <form id="securityForm" class="space-y-3">
+        <input id="newSecPin" type="password" maxlength="4" pattern="[0-9]*" inputmode="numeric" placeholder="신규 비밀번호 (4자리)" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-center focus:outline-none focus:border-indigo-400 font-mono tracking-widest" required>
+        <input id="confirmSecPin" type="password" maxlength="4" pattern="[0-9]*" inputmode="numeric" placeholder="비밀번호 확인" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-center focus:outline-none focus:border-indigo-400 font-mono tracking-widest" required>
+        <button type="submit" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-indigo-100">
+          확인 완료
         </button>
       </form>
     </div>
@@ -1061,9 +1358,8 @@ function buildSecuritySettingsSection() {
   return section;
 }
 
-/* ---------- 9. EVENT BINDING (최초 1회) ---------- */
+/* ---------- 11. STATIC INTERACTIVE EVENT BINDINGS ---------- */
 function bindStaticEvents() {
-  // 잠금화면 키패드
   document.querySelectorAll('.keypadBtn').forEach(btn => {
     btn.addEventListener('click', () => handleKeypad(btn.dataset.key));
   });
@@ -1073,86 +1369,150 @@ function bindStaticEvents() {
     else if (e.key === 'Backspace') handleKeypad('back');
   });
 
-  // 헤더 컨트롤
+  // Navigation
   $('prevMonthBtn').addEventListener('click', () => changeMonth(-1));
   $('nextMonthBtn').addEventListener('click', () => changeMonth(1));
   $('lockBtn').addEventListener('click', lockApp);
   $('settingsBtn').addEventListener('click', openSettingsModal);
   $('closeSettingsBtn').addEventListener('click', closeSettingsModal);
   $('closeSettingsBtn2').addEventListener('click', closeSettingsModal);
+  
   $('installBtn').addEventListener('click', openInstallModal);
   $('closeInstallBtn').addEventListener('click', closeInstallModal);
   $('closeInstallBtn2').addEventListener('click', closeInstallModal);
 
-  // 설정 모달 탭
+  // Install PWA Action
+  $('pwaInstallTriggerBtn').addEventListener('click', async () => {
+    // Check if browser native install is supported and deferred
+    if (state.deferredPrompt) {
+      state.deferredPrompt.prompt();
+      const { outcome } = await state.deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        showToast('성공적으로 앱이 설치되었습니다!');
+        state.deferredPrompt = null;
+        $('pwaInstallBanner').classList.add('hidden');
+      }
+    } else {
+      // Fallback iOS Safari or other browser
+      openInstallModal();
+    }
+  });
+
+  $('pwaCloseBtn').addEventListener('click', () => {
+    $('pwaInstallBanner').classList.add('hidden');
+  });
+
   document.querySelectorAll('.settingsTabBtn').forEach(btn => {
     btn.addEventListener('click', () => setSecurityTab(btn.dataset.tab));
   });
 
-  // 거래 등록 폼
   $('transactionForm').addEventListener('submit', handleAddTransaction);
   document.querySelectorAll('.txTypeBtn').forEach(btn => {
     btn.addEventListener('click', () => setTxType(btn.dataset.type));
   });
 
-  // 확인 모달
+  $('txSearch').addEventListener('input', (e) => {
+    state.txSearchQuery = e.target.value;
+    renderAll();
+  });
+  $('txFilterType').addEventListener('change', (e) => {
+    state.txFilterType = e.target.value;
+    renderAll();
+  });
+
   $('confirmCancelBtn').addEventListener('click', closeConfirm);
   $('confirmOkBtn').addEventListener('click', () => {
     if (typeof activeConfirmCallback === 'function') activeConfirmCallback();
     closeConfirm();
   });
 
-  // PWA 설치 프롬프트 캡처
+  // Save the prompt event for Chrome/Android
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     state.deferredPrompt = e;
+    
+    // Show premium mobile install banner at bottom
+    setTimeout(() => {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+      if (!isStandalone) {
+        $('pwaInstallBanner').classList.remove('hidden');
+      }
+    }, 1200);
   });
 
-  // 아이콘 로드 실패 시 대체 이미지
-  $('appIconImage').addEventListener('error', function handler() {
-    this.removeEventListener('error', handler);
+  // Handle fallback styling if appIcon fails to load
+  const fallbackImgHandler = function() {
     this.src = 'https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?auto=format&fit=crop&w=160&q=80';
-  });
+  };
+  $('appIconImage').addEventListener('error', fallbackImgHandler);
+  $('lockAppIcon').addEventListener('error', fallbackImgHandler);
+  $('headerAppIcon').addEventListener('error', fallbackImgHandler);
 }
 
 function openSettingsModal() {
   state.editingFeId = null;
   state.securityTab = 'info';
   setSecurityTab('info');
-  $('settingsModal').className = "fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50";
+  const modal = $('settingsModal');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
 }
 function closeSettingsModal() {
-  $('settingsModal').className = "fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-4 z-50";
+  const modal = $('settingsModal');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
 }
 function openInstallModal() {
-  if (state.deferredPrompt) {
-    state.deferredPrompt.prompt();
-    state.deferredPrompt.userChoice.then((choiceResult) => {
-      if (choiceResult.outcome === 'accepted') {
-        showToast('성공적으로 바로 가기 설치 프로세스를 가동했습니다.');
-        state.deferredPrompt = null;
-      }
-    });
-  } else {
-    $('installModal').className = "fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4 z-50";
-  }
+  const modal = $('installModal');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
 }
 function closeInstallModal() {
-  $('installModal').className = "fixed inset-0 bg-slate-900/70 backdrop-blur-md hidden items-center justify-center p-4 z-50";
+  const modal = $('installModal');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
 }
 
-/* ---------- 10. INIT ---------- */
-function init() {
-  state.fixedExpenses = Store.loadFixedExpenses();
-  state.transactions = Store.loadTransactions();
-  state.appPassword = Store.loadPassword();
-  state.isLocked = true;
-  state.setupStep = state.appPassword ? 0 : 1;
+/* ---------- 12. INITIALIZATION & SW REGISTRATION ---------- */
+async function init() {
+  // Mobile Date Initialization
+  const today = new Date();
+  const yearStr = today.getFullYear(); 
+  const monthStr = String(today.getMonth() + 1).padStart(2, '0'); 
+  const dateStr = String(today.getDate()).padStart(2, '0'); 
 
-  $('txDate').value = '2026-06-20';
+  state.currentMonth = `${yearStr}-${monthStr}`;
+  $('txDate').value = `${yearStr}-${monthStr}-${dateStr}`;
 
   bindStaticEvents();
-  renderAll();
+  await setupFirebase();
+
+  // Dynamically inject mobile iOS banner guide if inside iOS Safari and not added to home
+  const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isStandalone = window.navigator.standalone === true;
+  if (isiOS && !isStandalone) {
+    setTimeout(() => {
+      $('pwaInstruction').innerText = "아이폰 Safari에서 '공유 📤 -> 홈 화면에 추가'를 눌러 설치하세요!";
+      $('pwaInstallBanner').classList.remove('hidden');
+    }, 2000);
+  }
+
+  // Self-register Dynamic PWA Service Worker for standalone loading
+  if ('serviceWorker' in navigator) {
+    const swContent = `
+      const CACHE_NAME = 'gem-cache-v2';
+      self.addEventListener('install', (e) => {
+        e.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(['./', './index.html', './mybudget.png'])));
+      });
+      self.addEventListener('fetch', (e) => {
+        e.respondWith(caches.match(e.request).then((res) => res || fetch(e.request)));
+      });
+    `;
+    const blob = new Blob([swContent], { type: 'application/javascript' });
+    navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(err => {
+      console.log('SW registration bypassed (Internal Sandbox Or Origin restrictions). This is normal during canvas preview.');
+    });
+  }
 }
 
 window.onload = init;
