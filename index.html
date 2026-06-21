@@ -2,18 +2,19 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no, viewport-fit=cover">
 <title>젬의 스마트 가계부 Pro</title>
 
 <!-- PWA / 모바일 웹앱 최적화 메타 태그 -->
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="젬 가계부">
 <link rel="apple-touch-icon" href="mybudget.png">
 <meta name="theme-color" content="#0f172a">
 
 <!-- 웹앱 매니페스트 (동적 인라인 구성 - 깃허브 배포 시 최적의 작동 제공) -->
-<link rel="manifest" href='data:application/json,{"name":"젬의 스마트 가계부 Pro","short_name":"젬 가계부","start_url":".","display":"standalone","background_color":"#0f172a","theme_color":"#0f172a","icons":[{"src":"mybudget.png","sizes":"192x192","type":"image/png"},{"src":"mybudget.png","sizes":"512x512","type":"image/png"}]}' />
+<link id="manifestLink" rel="manifest" href='data:application/json,{"name":"%EC%A0%AC%EC%9D%98 %EC%8A%A4%EB%A7%88%ED%8A%B8 %EA%B0%80%EA%B3%84%EB%B6%80 Pro","short_name":"%EC%A0%AC %EA%B0%80%EA%B3%84%EB%B6%80","start_url":".","display":"standalone","background_color":"#0f172a","theme_color":"#0f172a","icons":[{"src":"mybudget.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},{"src":"mybudget.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}]}' />
 
 <!-- Tailwind CSS & Google Fonts -->
 <script src="https://cdn.tailwindcss.com"></script>
@@ -22,29 +23,38 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-  body { 
-    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; 
+  body {
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -webkit-tap-highlight-color: transparent;
   }
+  /* iOS 노치 안전영역 대응 */
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+
   @keyframes shake { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-6px);} 75%{transform:translateX(6px);} }
   .animate-shake { animation: shake .2s ease-in-out 2; }
   @keyframes bounceSubtle { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-4px);} }
   .animate-bounce-subtle { animation: bounceSubtle 2s ease-in-out infinite; }
   @keyframes slideUp { from{transform:translateY(100%); opacity:0;} to{transform:translateY(0); opacity:1;} }
   .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-  
+
   ::-webkit-scrollbar { width:6px; height:6px; }
   ::-webkit-scrollbar-track { background:transparent; }
   ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:9999px; }
   ::-webkit-scrollbar-thumb:hover { background:#94a3b8; }
+
+  /* 숫자 인풋 스피너 제거 (모바일 깔끔) */
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type=number] { -moz-appearance: textfield; }
 </style>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen select-none pb-safe">
 
 <!-- ================= 토스트 알림 ================= -->
-<div id="toast" class="fixed bottom-6 right-6 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
-  <span id="toastIcon" class="text-emerald-400">
+<div id="toast" class="fixed bottom-6 right-6 left-6 sm:left-auto max-w-sm sm:max-w-none mx-auto sm:mx-0 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2 z-[60] transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+  <span id="toastIcon" class="text-emerald-400 shrink-0">
     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
@@ -53,8 +63,8 @@
 </div>
 
 <!-- ================= 확인 모달 ================= -->
-<div id="confirmModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
-  <div class="bg-white rounded-3xl w-full max-w-sm shadow-2xl p-6 text-center border border-slate-100 transform scale-95 transition-all duration-200">
+<div id="confirmModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-4 z-[55]">
+  <div class="bg-white rounded-3xl w-full max-w-sm shadow-2xl p-6 text-center border border-slate-100">
     <div class="w-14 h-14 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl">⚠️</div>
     <h3 id="confirmTitle" class="text-lg font-black text-slate-900 tracking-tight">정말 삭제하시겠습니까?</h3>
     <p id="confirmMessage" class="text-xs text-slate-500 mt-1.5 mb-6 leading-relaxed">이 작업은 복구할 수 없습니다.</p>
@@ -66,7 +76,7 @@
 </div>
 
 <!-- ================= 잠금 화면 ================= -->
-<div id="lockScreen" class="min-h-screen bg-slate-900 flex flex-col justify-center items-center text-white px-4 select-none">
+<div id="lockScreen" class="min-h-screen bg-slate-900 flex flex-col justify-center items-center text-white px-4 py-10 select-none">
   <div class="mb-8 text-center">
     <div class="w-16 h-16 bg-gradient-to-tr from-emerald-400 to-teal-600 rounded-2xl mx-auto flex items-center justify-center text-3xl shadow-lg shadow-emerald-900/30 mb-4 animate-pulse overflow-hidden">
       <img id="lockAppIcon" src="mybudget.png" alt="🔒" class="w-full h-full object-cover">
@@ -79,10 +89,10 @@
     <p id="lockDescription" class="text-xs text-slate-500 mt-1">가계부 조회를 위해 비밀번호 4자리를 입력해 주세요.</p>
   </div>
   <div id="pinDots" class="flex justify-center gap-5 mb-12">
-    <div class="w-4.5 h-4.5 rounded-full border-2 border-slate-600 bg-slate-800 transition-all duration-150"></div>
-    <div class="w-4.5 h-4.5 rounded-full border-2 border-slate-600 bg-slate-800 transition-all duration-150"></div>
-    <div class="w-4.5 h-4.5 rounded-full border-2 border-slate-600 bg-slate-800 transition-all duration-150"></div>
-    <div class="w-4.5 h-4.5 rounded-full border-2 border-slate-600 bg-slate-800 transition-all duration-150"></div>
+    <div class="w-4 h-4 rounded-full border-2 border-slate-600 bg-slate-800 transition-all duration-150"></div>
+    <div class="w-4 h-4 rounded-full border-2 border-slate-600 bg-slate-800 transition-all duration-150"></div>
+    <div class="w-4 h-4 rounded-full border-2 border-slate-600 bg-slate-800 transition-all duration-150"></div>
+    <div class="w-4 h-4 rounded-full border-2 border-slate-600 bg-slate-800 transition-all duration-150"></div>
   </div>
   <div class="w-full max-w-xs grid grid-cols-3 gap-4 mb-6">
     <button data-key="1" class="keypadBtn h-16 rounded-full bg-slate-800/60 hover:bg-slate-700/80 active:scale-95 transition text-xl font-bold border border-slate-700/30 flex items-center justify-center">1</button>
@@ -102,44 +112,42 @@
       </svg>
     </button>
   </div>
-  <p class="text-xs text-slate-600">키보드의 숫자 키패드를 눌러 입력할 수도 있습니다.</p>
+  <p class="text-xs text-slate-600 text-center">키보드의 숫자 키패드를 눌러 입력할 수도 있습니다.</p>
 </div>
 
 <!-- ================= 메인 화면 ================= -->
 <div id="mainApp" class="hidden">
-  <!-- 모바일 환경에서 글자배열 어그러짐을 해결한 반응형 다중 단식 헤더 -->
-  <header class="sticky top-0 bg-slate-900 text-white shadow-md z-40">
+  <header class="sticky top-0 bg-slate-900 text-white shadow-md z-40 pt-safe">
     <div class="max-w-7xl mx-auto px-4 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-      
+
       <!-- 1층 (좌측): 브랜드 아이콘 및 로고 텍스트, 상태 배지 -->
       <div class="flex items-center justify-between w-full sm:w-auto">
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 min-w-0">
           <div class="w-10 h-10 bg-slate-800 rounded-xl overflow-hidden shadow-inner flex items-center justify-center shrink-0 border border-slate-700/50">
             <img src="mybudget.png" id="headerAppIcon" alt="📊" class="w-full h-full object-cover">
           </div>
-          <div>
-            <h1 class="text-base font-bold tracking-tight text-slate-100">젬의 스마트 가계부 Pro</h1>
-            <p class="text-[10px] text-slate-400 font-medium">자산 흐름 & 클라우드 실시간 동기화</p>
+          <div class="min-w-0">
+            <h1 class="text-base font-bold tracking-tight text-slate-100 truncate">젬의 스마트 가계부 Pro</h1>
+            <p class="text-[10px] text-slate-400 font-medium truncate">자산 흐름 &amp; 클라우드 실시간 동기화</p>
           </div>
         </div>
-        <!-- 모바일 가로폭에서 글자를 밀어내지 않도록 우측 고정 처리 -->
-        <span id="syncStatusBadge" class="text-[9px] px-2 py-0.5 rounded-full font-bold transition-all duration-300 shrink-0 select-none">
+        <span id="syncStatusBadge" class="text-[9px] px-2 py-0.5 rounded-full font-bold transition-all duration-300 shrink-0 select-none ml-2">
           인증 중...
         </span>
       </div>
 
       <!-- 2층 (우측): 월 네비게이터 & 유틸리티 제어 그룹 -->
-      <div class="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto border-t border-slate-800/60 pt-3 sm:border-t-0 sm:pt-0">
+      <div class="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto border-t border-slate-800/60 pt-3 sm:border-t-0 sm:pt-0">
         <!-- 월 이동 컨트롤러 -->
-        <div class="flex items-center bg-slate-800 rounded-xl p-0.5 shadow-inner">
+        <div class="flex items-center bg-slate-800 rounded-xl p-0.5 shadow-inner shrink-0">
           <button id="prevMonthBtn" class="p-2 hover:bg-slate-700 rounded-lg transition text-xs text-slate-300" title="이전달">◀</button>
           <span id="currentMonthLabel" class="px-2.5 text-xs font-extrabold tracking-wide text-slate-100 whitespace-nowrap min-w-[76px] text-center">2026년 06월</span>
           <button id="nextMonthBtn" class="p-2 hover:bg-slate-700 rounded-lg transition text-xs text-slate-300" title="다음달">▶</button>
         </div>
 
         <!-- 유틸리티 버튼 모음 -->
-        <div class="flex items-center gap-2">
-          <button id="installBtn" class="p-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all border border-indigo-500 hover:border-indigo-400 flex items-center justify-center text-white font-bold text-xs gap-1 shadow-md">
+        <div class="flex items-center gap-1.5 sm:gap-2">
+          <button id="installBtn" class="p-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all border border-indigo-500 hover:border-indigo-400 flex items-center justify-center text-white font-bold text-xs gap-1 shadow-md" title="홈 화면에 추가">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
             </svg>
@@ -163,38 +171,38 @@
   </header>
 
   <main class="max-w-7xl mx-auto px-4 py-6">
-    <!-- 모바일 화면 비율 균등 배치를 적용한 통계 가이드 카드 그리드 -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-      
+    <!-- 통계 가이드 카드 그리드 -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
+
       <!-- 수입 카드 -->
       <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex items-center justify-between hover:shadow-md transition">
-        <div>
+        <div class="min-w-0">
           <p class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">이번 달 수입</p>
-          <h3 id="statIncome" class="text-base sm:text-xl font-black text-emerald-600">₩ 0</h3>
+          <h3 id="statIncome" class="text-base sm:text-xl font-black text-emerald-600 truncate">₩ 0</h3>
         </div>
-        <div class="p-2 bg-emerald-50 rounded-lg text-emerald-600 hidden sm:block">
+        <div class="p-2 bg-emerald-50 rounded-lg text-emerald-600 hidden sm:block shrink-0">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
         </div>
       </div>
 
       <!-- 지출 카드 -->
       <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex items-center justify-between hover:shadow-md transition">
-        <div>
+        <div class="min-w-0">
           <p class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">이번 달 지출</p>
-          <h3 id="statExpense" class="text-base sm:text-xl font-black text-rose-600">₩ 0</h3>
+          <h3 id="statExpense" class="text-base sm:text-xl font-black text-rose-600 truncate">₩ 0</h3>
         </div>
-        <div class="p-2 bg-rose-50 rounded-lg text-rose-600 hidden sm:block">
+        <div class="p-2 bg-rose-50 rounded-lg text-rose-600 hidden sm:block shrink-0">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0v-8m0 8l-8-8-4 4-6-6" /></svg>
         </div>
       </div>
 
       <!-- 자산 잔액 카드 -->
       <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex items-center justify-between hover:shadow-md transition">
-        <div>
+        <div class="min-w-0">
           <p class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">당월 자산 잔액</p>
-          <h3 id="statBalance" class="text-base sm:text-xl font-black text-slate-800">₩ 0</h3>
+          <h3 id="statBalance" class="text-base sm:text-xl font-black text-slate-800 truncate">₩ 0</h3>
         </div>
-        <div id="balanceIconContainer" class="p-2 bg-slate-100 text-slate-700 rounded-lg hidden sm:block">
+        <div id="balanceIconContainer" class="p-2 bg-slate-100 text-slate-700 rounded-lg hidden sm:block shrink-0">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
         </div>
       </div>
@@ -204,44 +212,99 @@
         <div class="absolute top-0 right-0 p-4 opacity-10">
           <svg class="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
         </div>
-        <div>
+        <div class="min-w-0">
           <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">남은 고정 지출액</p>
-          <h3 id="statUnpaidFixed" class="text-base sm:text-xl font-black text-amber-400">₩ 0</h3>
+          <h3 id="statUnpaidFixed" class="text-base sm:text-xl font-black text-amber-400 truncate">₩ 0</h3>
         </div>
-        <div id="statTotalFixedPlanned" class="text-[10px] text-slate-400 mt-2 font-medium">총 계획: ₩ 0</div>
+        <div id="statTotalFixedPlanned" class="text-[10px] text-slate-400 mt-2 font-medium truncate">총 계획: ₩ 0</div>
       </div>
 
+    </div>
+
+    <!-- 예산 진행 배너 -->
+    <div id="budgetBanner" class="hidden bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200/80 mb-6">
+      <div class="flex items-center justify-between mb-2.5">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">🎯</span>
+          <h2 class="text-sm font-bold text-slate-900">이번 달 예산 사용 현황</h2>
+        </div>
+        <span id="budgetStatusBadge" class="text-[10px] px-2.5 py-1 rounded-full font-bold">—</span>
+      </div>
+      <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+        <div id="budgetProgressBar" class="h-full transition-all duration-500 rounded-full" style="width:0%"></div>
+      </div>
+      <div class="flex justify-between items-center mt-2 text-[11px] font-semibold">
+        <span id="budgetSpentLabel" class="text-slate-600">지출 ₩ 0</span>
+        <span id="budgetRemainLabel" class="text-slate-500">예산 ₩ 0</span>
+      </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div class="lg:col-span-2 space-y-6">
         <!-- 고정 지출 타임라인 -->
         <div class="bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-200/80">
-          <div class="flex justify-between items-center mb-4">
-            <div class="flex items-center gap-2">
-              <span class="text-xl">📅</span>
-              <h2 id="fixedExpensesHeader" class="text-base font-bold text-slate-900">0월 고정비 이체 및 납부 타임라인</h2>
+          <div class="flex justify-between items-center mb-4 gap-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-xl shrink-0">📅</span>
+              <h2 id="fixedExpensesHeader" class="text-sm sm:text-base font-bold text-slate-900 truncate">0월 고정비 이체 및 납부 타임라인</h2>
             </div>
-            <span id="plannedFixedCountBadge" class="text-[10px] bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-semibold">계획 0건</span>
+            <span id="plannedFixedCountBadge" class="text-[10px] bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-semibold shrink-0">계획 0건</span>
           </div>
           <div id="fixedTimelineContainer" class="space-y-2.5 max-h-[400px] overflow-y-auto pr-1"></div>
         </div>
 
+        <!-- 월별 추이 그래프 -->
+        <div class="bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-200/80">
+          <div class="flex items-center gap-2 mb-4">
+            <span class="text-xl">📊</span>
+            <h2 class="text-sm sm:text-base font-bold text-slate-900">최근 6개월 수입·지출 추이</h2>
+          </div>
+          <div class="relative w-full" style="height:240px;">
+            <canvas id="trendChart"></canvas>
+          </div>
+        </div>
+
         <!-- 소비/지출 리스트 -->
         <div class="bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-200/80">
-          <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
-            <div class="flex items-center gap-2">
-              <span class="text-xl">📝</span>
-              <h2 class="text-base font-bold text-slate-900">이번 달 가계부 소비/지출 리스트</h2>
+          <div class="flex flex-col gap-3 mb-4 pb-3 border-b border-slate-100">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="text-xl shrink-0">📝</span>
+                <h2 class="text-sm sm:text-base font-bold text-slate-900 truncate">이번 달 가계부 소비/지출 리스트</h2>
+              </div>
+              <span id="transactionCountBadge" class="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-semibold shrink-0">총 0건</span>
             </div>
             <div class="flex flex-wrap items-center gap-2">
-              <input type="text" id="txSearch" placeholder="내역 검색..." class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-indigo-400 w-full sm:w-40">
+              <input type="text" id="txSearch" placeholder="내역 검색..." class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-indigo-400 flex-1 min-w-[120px]">
               <select id="txFilterType" class="bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400">
                 <option value="all">전체</option>
                 <option value="expense">지출</option>
                 <option value="income">수입</option>
               </select>
-              <span id="transactionCountBadge" class="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-semibold">총 0건</span>
+              <button id="advFilterToggle" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-indigo-400 transition flex items-center gap-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.879a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
+                상세
+              </button>
+            </div>
+            <!-- 고급 필터 (기간·금액대) -->
+            <div id="advFilterPanel" class="hidden bg-slate-50 border border-slate-200 rounded-xl p-3 grid grid-cols-2 gap-2.5">
+              <div>
+                <label class="block text-[9px] font-bold text-slate-500 uppercase mb-1">시작 금액(원)</label>
+                <input type="number" id="filterMinAmount" inputmode="numeric" placeholder="최소" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-indigo-400">
+              </div>
+              <div>
+                <label class="block text-[9px] font-bold text-slate-500 uppercase mb-1">끝 금액(원)</label>
+                <input type="number" id="filterMaxAmount" inputmode="numeric" placeholder="최대" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-indigo-400">
+              </div>
+              <div>
+                <label class="block text-[9px] font-bold text-slate-500 uppercase mb-1">시작일</label>
+                <input type="date" id="filterStartDate" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-indigo-400">
+              </div>
+              <div>
+                <label class="block text-[9px] font-bold text-slate-500 uppercase mb-1">종료일</label>
+                <input type="date" id="filterEndDate" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-indigo-400">
+              </div>
+              <button id="filterResetBtn" class="col-span-2 text-[11px] font-bold text-rose-500 hover:bg-rose-50 rounded-lg py-1.5 transition">필터 초기화</button>
             </div>
           </div>
           <div id="transactionListContainer" class="divide-y divide-slate-100 max-h-[400px] overflow-y-auto pr-2"></div>
@@ -268,7 +331,7 @@
             </div>
             <div>
               <label class="block text-[10px] font-semibold text-slate-500 mb-1">금액 (원)</label>
-              <input type="number" id="txAmount" placeholder="예: 50000" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-slate-400" required>
+              <input type="number" id="txAmount" inputmode="numeric" placeholder="예: 50000" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-slate-400" required>
             </div>
             <div>
               <label class="block text-[10px] font-semibold text-slate-500 mb-1">내용 상세</label>
@@ -293,12 +356,9 @@
             </div>
             <div class="border-t border-slate-100 pt-3">
               <span class="text-[10px] font-semibold text-slate-500 block mb-2">지출 구성 비율 분포</span>
-              
-              <!-- Chart.js Canvas -->
-              <div class="relative w-full h-40 flex justify-center items-center">
+              <div class="relative w-full mx-auto" style="max-width:200px; height:160px;">
                 <canvas id="categoryChart"></canvas>
               </div>
-
               <div id="chartSummaryContainer" class="mt-3 pt-3 border-t border-slate-100"></div>
             </div>
           </div>
@@ -309,56 +369,54 @@
 
   <!-- ================= 설정 모달 ================= -->
   <div id="settingsModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
-    <div class="bg-white rounded-2xl w-full max-w-2xl shadow-2xl border border-slate-100 flex flex-col max-h-[85vh]">
+    <div class="bg-white rounded-2xl w-full max-w-2xl shadow-2xl border border-slate-100 flex flex-col max-h-[88vh]">
       <div class="p-5 border-b border-slate-100 flex justify-between items-center">
-        <div>
+        <div class="min-w-0">
           <h3 class="text-base font-bold text-slate-900 flex items-center gap-1.5"><span>⚙️</span> 환경설정 및 보안 제어</h3>
-          <p class="text-[10px] text-slate-500">고정 지출 및 개인 자산 보안 설정을 관리합니다.</p>
+          <p class="text-[10px] text-slate-500">고정 지출·예산·데이터·보안 설정을 관리합니다.</p>
         </div>
-        <button id="closeSettingsBtn" class="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition">
+        <button id="closeSettingsBtn" class="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition shrink-0">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
       </div>
-      <div class="flex border-b border-slate-100 bg-slate-50/50">
-        <button id="tabBtnInfo" data-tab="info" class="settingsTabBtn flex-1 py-3 text-xs font-bold border-b-2 transition border-indigo-600 text-indigo-600 bg-white">📋 고정 지출 설정</button>
-        <button id="tabBtnChange" data-tab="change" class="settingsTabBtn flex-1 py-3 text-xs font-bold border-b-2 transition border-transparent text-slate-500 hover:text-slate-800">🔐 가계부 PIN 암호 관리</button>
+      <div class="flex border-b border-slate-100 bg-slate-50/50 overflow-x-auto">
+        <button data-tab="info" class="settingsTabBtn flex-1 min-w-[90px] py-3 text-[11px] sm:text-xs font-bold border-b-2 transition border-indigo-600 text-indigo-600 bg-white whitespace-nowrap px-2">📋 고정 지출</button>
+        <button data-tab="budget" class="settingsTabBtn flex-1 min-w-[90px] py-3 text-[11px] sm:text-xs font-bold border-b-2 transition border-transparent text-slate-500 hover:text-slate-800 whitespace-nowrap px-2">🎯 예산 설정</button>
+        <button data-tab="data" class="settingsTabBtn flex-1 min-w-[90px] py-3 text-[11px] sm:text-xs font-bold border-b-2 transition border-transparent text-slate-500 hover:text-slate-800 whitespace-nowrap px-2">💾 데이터</button>
+        <button data-tab="change" class="settingsTabBtn flex-1 min-w-[90px] py-3 text-[11px] sm:text-xs font-bold border-b-2 transition border-transparent text-slate-500 hover:text-slate-800 whitespace-nowrap px-2">🔐 PIN 암호</button>
       </div>
       <div id="settingsModalContent" class="p-5 overflow-y-auto space-y-5 flex-1"></div>
       <div class="p-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex justify-between items-center text-[10px] text-slate-500">
-        <span>클라우드 동기화 시스템 작동 중</span>
+        <span id="syncFooterLabel">클라우드 동기화 시스템 작동 중</span>
         <button id="closeSettingsBtn2" class="bg-slate-900 text-white font-bold px-3 py-1.5 rounded-lg text-[10px] hover:bg-slate-800 transition">닫기</button>
       </div>
     </div>
   </div>
 
-  <!-- ================= 모바일 커스텀 홈화면 설치 유도 하단 모달 배너 ================= -->
+  <!-- ================= PWA 설치 유도 하단 배너 ================= -->
   <div id="pwaInstallBanner" class="fixed bottom-0 inset-x-0 bg-slate-900/95 backdrop-blur-md text-white border-t border-slate-800 p-4 pb-safe hidden z-50 animate-slide-up shadow-2xl">
     <div class="max-w-md mx-auto flex items-center justify-between gap-3">
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-3 min-w-0">
         <div class="w-12 h-12 rounded-xl overflow-hidden shadow border border-slate-700 bg-slate-800 shrink-0">
-          <img src="mybudget.png" alt="젬 스마트 가계부" class="w-full h-full object-cover">
+          <img src="mybudget.png" id="pwaBannerIcon" alt="젬 스마트 가계부" class="w-full h-full object-cover">
         </div>
-        <div>
-          <h4 class="text-sm font-bold text-slate-100">젬의 스마트 가계부 Pro</h4>
+        <div class="min-w-0">
+          <h4 class="text-sm font-bold text-slate-100 truncate">젬의 스마트 가계부 Pro</h4>
           <p id="pwaInstruction" class="text-[11px] text-slate-400 mt-0.5">앱으로 추가해 홈화면에서 편리하게 사용하세요!</p>
         </div>
       </div>
-      <div class="flex items-center gap-2">
-        <button id="pwaInstallTriggerBtn" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition whitespace-nowrap shadow-md">
-          앱 추가
-        </button>
+      <div class="flex items-center gap-2 shrink-0">
+        <button id="pwaInstallTriggerBtn" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition whitespace-nowrap shadow-md">앱 추가</button>
         <button id="pwaCloseBtn" class="text-slate-400 hover:text-slate-200 p-1.5" title="닫기">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
       </div>
     </div>
   </div>
 
-  <!-- ================= 설치 가이드 서브 모달 (iOS 사파리 전용) ================= -->
+  <!-- ================= 설치 가이드 서브 모달 ================= -->
   <div id="installModal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-md hidden items-center justify-center p-4 z-50">
-    <div class="bg-white rounded-3xl w-full max-w-sm shadow-2xl border border-slate-100 p-5 relative overflow-hidden animate-bounce-subtle">
+    <div class="bg-white rounded-3xl w-full max-w-sm shadow-2xl border border-slate-100 p-5 relative overflow-hidden">
       <button id="closeInstallBtn" class="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
       </button>
@@ -372,7 +430,7 @@
         <div class="space-y-3 text-left">
           <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/50">
             <h4 class="text-xs font-bold text-slate-700 flex items-center gap-1.5 mb-1.5"><span class="text-sm">🍎</span> iPhone (Safari 전용 가이드)</h4>
-            <ol class="text-[11px] text-slate-500 list-decimal pl-4.5 space-y-1 font-medium">
+            <ol class="text-[11px] text-slate-500 list-decimal pl-4 space-y-1 font-medium">
               <li>하단 툴바의 <strong class="text-slate-800">공유(내보내기) 버튼 📤</strong>을 터치합니다.</li>
               <li>화면을 아래로 내려 <strong class="text-indigo-600">홈 화면에 추가</strong> 메뉴를 탭합니다.</li>
               <li>우측 상단 <strong class="text-slate-800">추가</strong>를 클릭하면 완성됩니다!</li>
@@ -380,7 +438,7 @@
           </div>
           <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/50">
             <h4 class="text-xs font-bold text-slate-700 flex items-center gap-1.5 mb-1.5"><span class="text-sm">🤖</span> Android (크롬/삼성브라우저)</h4>
-            <ol class="text-[11px] text-slate-500 list-decimal pl-4.5 space-y-1 font-medium">
+            <ol class="text-[11px] text-slate-500 list-decimal pl-4 space-y-1 font-medium">
               <li>우측 메뉴 <strong class="text-slate-800">(⋮ 또는 ☰)</strong>를 클릭합니다.</li>
               <li><strong class="text-indigo-600">앱 설치</strong> 또는 <strong class="text-indigo-600">홈 화면에 추가</strong>를 탭해 주세요.</li>
             </ol>
@@ -392,9 +450,11 @@
   </div>
 </div>
 
+<!-- 숨겨진 파일 import input -->
+<input type="file" id="importFileInput" accept="application/json,.json" class="hidden">
+
 <!-- ================= Firebase & Core Scripts (ES Module) ================= -->
 <script type="module">
-// Firebase SDK 임포트
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -404,7 +464,8 @@ const APP_NAME = "gem_smart_budget_pro";
 const STORAGE_KEYS = {
   fixedExpenses: `${APP_NAME}_fixed_expenses`,
   transactions: `${APP_NAME}_transactions`,
-  password: `${APP_NAME}_app_password`
+  password: `${APP_NAME}_app_password`,
+  budget: `${APP_NAME}_monthly_budget`
 };
 
 const DEFAULT_FIXED_EXPENSES = [
@@ -435,19 +496,23 @@ const state = {
   fixedExpenses: [],
   transactions: [],
   appPassword: '',
+  monthlyBudget: 0,
+  budgetAlertShownFor: '',   // 알림 중복 방지용 (YYYY-MM)
   isLocked: true,
   pinInput: '',
-  setupStep: 0,        
+  setupStep: 0,
   tempNewPin: '',
   currentMonth: '2026-06',
   txType: 'expense',
   txSearchQuery: '',
   txFilterType: 'all',
+  filterMinAmount: '',
+  filterMaxAmount: '',
+  filterStartDate: '',
+  filterEndDate: '',
   editingFeId: null,
   securityTab: 'info',
   deferredPrompt: null,
-  
-  // Cloud Sync State
   isCloudMode: false,
   currentUser: null,
   db: null,
@@ -455,48 +520,57 @@ const state = {
   appId: 'default-app-id'
 };
 
-// Global Chart Instance
 let myDoughnutChart = null;
+let myTrendChart = null;
 
-/* ---------- 3. FIREBASE SETUP (Mandatory Rules 1, 2, 3) ---------- */
+/* ---------- 유틸: 그 달의 실제 마지막 날 ---------- */
+function lastDayOfMonth(yyyyMM) {
+  const [y, m] = yyyyMM.split('-').map(Number);
+  return new Date(y, m, 0).getDate(); // m은 1~12, Date(y, m, 0) = 그 달 말일
+}
+// 고정비 예정일을 해당 월에 맞춰 보정 (31일=말일이면 그 달 마지막 날로)
+function resolveFixedDay(day, yyyyMM) {
+  const last = lastDayOfMonth(yyyyMM);
+  return Math.min(day, last);
+}
+
+/* ---------- 3. FIREBASE SETUP ---------- */
 async function setupFirebase() {
   const syncBadge = document.getElementById('syncStatusBadge');
   try {
     if (typeof __firebase_config === 'undefined' || !__firebase_config) {
       throw new Error("No Firebase Config detected");
     }
-    
     const firebaseConfig = JSON.parse(__firebase_config);
     const app = initializeApp(firebaseConfig);
     state.auth = getAuth(app);
     state.db = getFirestore(app);
     state.appId = typeof __app_id !== 'undefined' ? __app_id : 'gem-budget-app';
-    
+
     let userCredential;
     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
       userCredential = await signInWithCustomToken(state.auth, __initial_auth_token);
     } else {
       userCredential = await signInAnonymously(state.auth);
     }
-    
+
     state.currentUser = userCredential.user;
     state.isCloudMode = true;
-    
+
     syncBadge.innerText = "☁️ 실시간 클라우드";
-    syncBadge.className = "text-[9px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
-    
+    syncBadge.className = "text-[9px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0 ml-2";
+
     await syncInitialUserData();
-    
   } catch (error) {
-    console.warn("Firebase Initializing failed. Falling back to LocalStorage:", error);
+    console.warn("Firebase init failed → LocalStorage fallback:", error);
     state.isCloudMode = false;
     syncBadge.innerText = "💾 오프라인 로컬";
-    syncBadge.className = "text-[9px] px-2 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30";
-    
+    syncBadge.className = "text-[9px] px-2 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0 ml-2";
+
     state.fixedExpenses = Store.loadFixedExpenses();
     state.transactions = Store.loadTransactions();
     state.appPassword = Store.loadPassword();
-    
+    state.monthlyBudget = Store.loadBudget();
     afterDataLoaded();
   }
 }
@@ -505,60 +579,40 @@ async function syncInitialUserData() {
   const userId = state.currentUser.uid;
   const appId = state.appId;
   const db = state.db;
-  
+
   const fixedExpensesRef = doc(db, 'artifacts', appId, 'users', userId, 'config', 'fixedExpenses');
   const passwordRef = doc(db, 'artifacts', appId, 'users', userId, 'config', 'password');
   const transactionsRef = doc(db, 'artifacts', appId, 'users', userId, 'config', 'transactions');
+  const budgetRef = doc(db, 'artifacts', appId, 'users', userId, 'config', 'budget');
 
-  // Load Password
   const pwSnap = await getDoc(passwordRef);
-  if (pwSnap.exists()) {
-    state.appPassword = pwSnap.data().password || '';
-  } else {
-    state.appPassword = Store.loadPassword();
-    await setDoc(passwordRef, { password: state.appPassword });
-  }
+  if (pwSnap.exists()) state.appPassword = pwSnap.data().password || '';
+  else { state.appPassword = Store.loadPassword(); await setDoc(passwordRef, { password: state.appPassword }); }
 
-  // Load Fixed Expenses
   const feSnap = await getDoc(fixedExpensesRef);
-  if (feSnap.exists()) {
-    state.fixedExpenses = feSnap.data().list || [];
-  } else {
+  if (feSnap.exists()) state.fixedExpenses = feSnap.data().list || [];
+  else {
     const localFe = Store.loadFixedExpenses();
     state.fixedExpenses = localFe.length > 0 ? localFe : DEFAULT_FIXED_EXPENSES;
     await setDoc(fixedExpensesRef, { list: state.fixedExpenses });
   }
 
-  // Load Transactions
   const txSnap = await getDoc(transactionsRef);
-  if (txSnap.exists()) {
-    state.transactions = txSnap.data().list || [];
-  } else {
+  if (txSnap.exists()) state.transactions = txSnap.data().list || [];
+  else {
     const localTx = Store.loadTransactions();
     state.transactions = localTx.length > 0 ? localTx : DEFAULT_TRANSACTIONS;
     await setDoc(transactionsRef, { list: state.transactions });
   }
 
-  // Listeners
-  onSnapshot(fixedExpensesRef, (snapshot) => {
-    if (snapshot.exists()) {
-      state.fixedExpenses = snapshot.data().list || [];
-      renderAll();
-    }
-  }, (err) => console.error("Fixed Expenses sync error: ", err));
+  const budgetSnap = await getDoc(budgetRef);
+  if (budgetSnap.exists()) state.monthlyBudget = budgetSnap.data().value || 0;
+  else { state.monthlyBudget = Store.loadBudget(); await setDoc(budgetRef, { value: state.monthlyBudget }); }
 
-  onSnapshot(transactionsRef, (snapshot) => {
-    if (snapshot.exists()) {
-      state.transactions = snapshot.data().list || [];
-      renderAll();
-    }
-  }, (err) => console.error("Transactions sync error: ", err));
-
-  onSnapshot(passwordRef, (snapshot) => {
-    if (snapshot.exists()) {
-      state.appPassword = snapshot.data().password || '';
-    }
-  }, (err) => console.error("Password sync error: ", err));
+  onSnapshot(fixedExpensesRef, (s) => { if (s.exists()) { state.fixedExpenses = s.data().list || []; renderAll(); } }, (e) => console.error("FE sync:", e));
+  onSnapshot(transactionsRef, (s) => { if (s.exists()) { state.transactions = s.data().list || []; renderAll(); } }, (e) => console.error("TX sync:", e));
+  onSnapshot(passwordRef, (s) => { if (s.exists()) state.appPassword = s.data().password || ''; }, (e) => console.error("PW sync:", e));
+  onSnapshot(budgetRef, (s) => { if (s.exists()) { state.monthlyBudget = s.data().value || 0; renderAll(); } }, (e) => console.error("Budget sync:", e));
 
   afterDataLoaded();
 }
@@ -566,20 +620,18 @@ async function syncInitialUserData() {
 async function saveCloudData(field) {
   if (!state.isCloudMode || !state.currentUser) return;
   const userId = state.currentUser.uid;
-  
   try {
     if (field === 'fixedExpenses') {
-      const ref = doc(state.db, 'artifacts', state.appId, 'users', userId, 'config', 'fixedExpenses');
-      await setDoc(ref, { list: state.fixedExpenses });
+      await setDoc(doc(state.db, 'artifacts', state.appId, 'users', userId, 'config', 'fixedExpenses'), { list: state.fixedExpenses });
     } else if (field === 'transactions') {
-      const ref = doc(state.db, 'artifacts', state.appId, 'users', userId, 'config', 'transactions');
-      await setDoc(ref, { list: state.transactions });
+      await setDoc(doc(state.db, 'artifacts', state.appId, 'users', userId, 'config', 'transactions'), { list: state.transactions });
     } else if (field === 'password') {
-      const ref = doc(state.db, 'artifacts', state.appId, 'users', userId, 'config', 'password');
-      await setDoc(ref, { password: state.appPassword });
+      await setDoc(doc(state.db, 'artifacts', state.appId, 'users', userId, 'config', 'password'), { password: state.appPassword });
+    } else if (field === 'budget') {
+      await setDoc(doc(state.db, 'artifacts', state.appId, 'users', userId, 'config', 'budget'), { value: state.monthlyBudget });
     }
   } catch (err) {
-    console.error("Cloud saving error: ", err);
+    console.error("Cloud saving error:", err);
     showToast("⚠️ 실시간 클라우드 저장 실패");
   }
 }
@@ -587,57 +639,39 @@ async function saveCloudData(field) {
 function afterDataLoaded() {
   state.isLocked = true;
   state.setupStep = state.appPassword ? 0 : 1;
+  const footer = document.getElementById('syncFooterLabel');
+  if (footer) footer.innerText = state.isCloudMode ? '☁️ 클라우드 동기화 작동 중' : '💾 이 기기에 로컬 저장 중';
   renderAll();
 }
 
 /* ---------- 4. STORAGE FALLBACKS ---------- */
 const Store = {
-  loadFixedExpenses() {
-    const raw = localStorage.getItem(STORAGE_KEYS.fixedExpenses);
-    return raw ? JSON.parse(raw) : DEFAULT_FIXED_EXPENSES;
-  },
-  saveFixedExpenses(list) {
-    localStorage.setItem(STORAGE_KEYS.fixedExpenses, JSON.stringify(list));
-    saveCloudData('fixedExpenses');
-  },
-  loadTransactions() {
-    const raw = localStorage.getItem(STORAGE_KEYS.transactions);
-    return raw ? JSON.parse(raw) : DEFAULT_TRANSACTIONS;
-  },
-  saveTransactions(list) {
-    localStorage.setItem(STORAGE_KEYS.transactions, JSON.stringify(list));
-    saveCloudData('transactions');
-  },
-  loadPassword() {
-    return localStorage.getItem(STORAGE_KEYS.password) || '';
-  },
-  savePassword(pw) {
-    localStorage.setItem(STORAGE_KEYS.password, pw);
-    saveCloudData('password');
-  },
-  clearPassword() {
-    localStorage.removeItem(STORAGE_KEYS.password);
-    saveCloudData('password');
-  }
+  loadFixedExpenses() { const raw = localStorage.getItem(STORAGE_KEYS.fixedExpenses); return raw ? JSON.parse(raw) : DEFAULT_FIXED_EXPENSES; },
+  saveFixedExpenses(list) { localStorage.setItem(STORAGE_KEYS.fixedExpenses, JSON.stringify(list)); saveCloudData('fixedExpenses'); },
+  loadTransactions() { const raw = localStorage.getItem(STORAGE_KEYS.transactions); return raw ? JSON.parse(raw) : DEFAULT_TRANSACTIONS; },
+  saveTransactions(list) { localStorage.setItem(STORAGE_KEYS.transactions, JSON.stringify(list)); saveCloudData('transactions'); },
+  loadPassword() { return localStorage.getItem(STORAGE_KEYS.password) || ''; },
+  savePassword(pw) { localStorage.setItem(STORAGE_KEYS.password, pw); saveCloudData('password'); },
+  clearPassword() { localStorage.removeItem(STORAGE_KEYS.password); saveCloudData('password'); },
+  loadBudget() { return parseInt(localStorage.getItem(STORAGE_KEYS.budget) || '0', 10) || 0; },
+  saveBudget(v) { localStorage.setItem(STORAGE_KEYS.budget, String(v)); saveCloudData('budget'); }
 };
 
 /* ---------- 5. UTILITIES ---------- */
 const $ = (id) => document.getElementById(id);
 
 function formatKRW(val) {
-  return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' })
-    .format(val)
-    .replace('₩', '₩ ');
+  return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(val).replace('₩', '₩ ');
 }
 
 let toastTimer = null;
 function showToast(message) {
   const toast = $('toast');
   $('toastMessage').innerText = message;
-  toast.className = "fixed bottom-6 right-6 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2 z-50 transform translate-y-0 opacity-100 transition-all duration-300 pointer-events-auto";
+  toast.className = "fixed bottom-6 right-6 left-6 sm:left-auto max-w-sm sm:max-w-none mx-auto sm:mx-0 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2 z-[60] transform translate-y-0 opacity-100 transition-all duration-300 pointer-events-auto";
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
-    toast.className = "fixed bottom-6 right-6 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none";
+    toast.className = "fixed bottom-6 right-6 left-6 sm:left-auto max-w-sm sm:max-w-none mx-auto sm:mx-0 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2 z-[60] transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none";
   }, 3000);
 }
 
@@ -647,96 +681,65 @@ function showConfirm(title, message, onOk) {
   $('confirmMessage').innerText = message;
   activeConfirmCallback = onOk;
   const modal = $('confirmModal');
-  modal.classList.remove('hidden');
-  modal.classList.add('flex');
+  modal.classList.remove('hidden'); modal.classList.add('flex');
 }
 function closeConfirm() {
   const modal = $('confirmModal');
-  modal.classList.add('hidden');
-  modal.classList.remove('flex');
+  modal.classList.add('hidden'); modal.classList.remove('flex');
   activeConfirmCallback = null;
 }
 
 /* ---------- 6. SECURITY ---------- */
 function handleKeypad(val) {
-  const pinDotsEl = $('pinDots');
-  pinDotsEl.classList.remove('animate-shake');
-
-  if (val === 'back') {
-    state.pinInput = state.pinInput.slice(0, -1);
-    updatePinDots();
-    return;
-  }
+  $('pinDots').classList.remove('animate-shake');
+  if (val === 'back') { state.pinInput = state.pinInput.slice(0, -1); updatePinDots(); return; }
   if (state.pinInput.length >= 4) return;
-
   state.pinInput += val;
   updatePinDots();
-
-  if (state.pinInput.length === 4) {
-    setTimeout(verifyPinProcess, 150);
-  }
+  if (state.pinInput.length === 4) setTimeout(verifyPinProcess, 150);
 }
 
 function updatePinDots() {
   const dots = $('pinDots').children;
   for (let i = 0; i < 4; i++) {
     dots[i].className = i < state.pinInput.length
-      ? "w-4.5 h-4.5 rounded-full border-2 bg-emerald-400 border-emerald-400 scale-110 shadow-md shadow-emerald-400/50 transition-all duration-150"
-      : "w-4.5 h-4.5 rounded-full border-2 border-slate-600 bg-slate-800 transition-all duration-150";
+      ? "w-4 h-4 rounded-full border-2 bg-emerald-400 border-emerald-400 scale-110 shadow-md shadow-emerald-400/50 transition-all duration-150"
+      : "w-4 h-4 rounded-full border-2 border-slate-600 bg-slate-800 transition-all duration-150";
   }
 }
 
-function triggerPinShake() {
-  $('pinDots').classList.add('animate-shake');
-}
+function triggerPinShake() { $('pinDots').classList.add('animate-shake'); }
 
 function verifyPinProcess() {
   const input = state.pinInput;
   state.pinInput = '';
-
   if (!state.appPassword) {
     if (state.setupStep === 1) {
-      state.tempNewPin = input;
-      state.setupStep = 2;
-      updatePinDots();
-      showToast('확인을 위해 한 번 더 입력해 주세요.');
-      renderLockScreenText();
+      state.tempNewPin = input; state.setupStep = 2; updatePinDots();
+      showToast('확인을 위해 한 번 더 입력해 주세요.'); renderLockScreenText();
     } else if (state.setupStep === 2) {
       if (input === state.tempNewPin) {
-        state.appPassword = input;
-        Store.savePassword(input);
-        state.isLocked = false;
-        state.setupStep = 0;
-        updatePinDots();
-        showToast('보안 비밀번호가 설정되었습니다!');
-        renderAll();
+        state.appPassword = input; Store.savePassword(input);
+        state.isLocked = false; state.setupStep = 0; updatePinDots();
+        showToast('보안 비밀번호가 설정되었습니다!'); renderAll();
       } else {
-        triggerPinShake();
-        state.setupStep = 1;
-        updatePinDots();
-        showToast('비밀번호가 다릅니다. 다시 설정하세요.');
-        renderLockScreenText();
+        triggerPinShake(); state.setupStep = 1; updatePinDots();
+        showToast('비밀번호가 다릅니다. 다시 설정하세요.'); renderLockScreenText();
       }
     }
   } else {
     if (input === state.appPassword) {
-      state.isLocked = false;
-      updatePinDots();
-      showToast('성공적으로 잠금이 해제되었습니다.');
-      renderAll();
+      state.isLocked = false; updatePinDots();
+      showToast('성공적으로 잠금이 해제되었습니다.'); renderAll();
     } else {
-      triggerPinShake();
-      updatePinDots();
+      triggerPinShake(); updatePinDots();
       showToast('비밀번호가 일치하지 않습니다.');
     }
   }
 }
 
 function renderLockScreenText() {
-  const title = $('lockTitle');
-  const desc = $('lockDescription');
-  const subtitle = $('lockSubtitle');
-
+  const title = $('lockTitle'), desc = $('lockDescription'), subtitle = $('lockSubtitle');
   if (!state.appPassword) {
     subtitle.innerText = '자산 보호를 위한 보안 잠금 설정';
     if (state.setupStep === 1) {
@@ -754,49 +757,28 @@ function renderLockScreenText() {
 }
 
 function lockApp() {
-  state.isLocked = true;
-  state.pinInput = '';
+  state.isLocked = true; state.pinInput = '';
   if (!state.appPassword) state.setupStep = 1;
-  showToast('보안 잠금 상태로 전환되었습니다.');
-  renderAll();
+  showToast('보안 잠금 상태로 전환되었습니다.'); renderAll();
 }
 
 function handleUpdateSecuritySettings(e) {
   e.preventDefault();
-  const pin1 = $('newSecPin').value;
-  const pin2 = $('confirmSecPin').value;
-
-  if (pin1.length !== 4 || isNaN(pin1) || pin2.length !== 4 || isNaN(pin2)) {
-    showToast('PIN 비밀번호는 숫자 4자리 형식입니다.');
-    return;
-  }
-  if (pin1 !== pin2) {
-    showToast('비밀번호 일치 확인을 실패했습니다.');
-    return;
-  }
-
-  state.appPassword = pin1;
-  Store.savePassword(pin1);
-  showToast('가계부 잠금 비밀번호가 변경되었습니다.');
-  setSecurityTab('info');
+  const pin1 = $('newSecPin').value, pin2 = $('confirmSecPin').value;
+  if (pin1.length !== 4 || isNaN(pin1) || pin2.length !== 4 || isNaN(pin2)) { showToast('PIN 비밀번호는 숫자 4자리 형식입니다.'); return; }
+  if (pin1 !== pin2) { showToast('비밀번호 일치 확인을 실패했습니다.'); return; }
+  state.appPassword = pin1; Store.savePassword(pin1);
+  showToast('가계부 잠금 비밀번호가 변경되었습니다.'); setSecurityTab('change');
 }
 
 function handleDisableSecurity() {
-  showConfirm(
-    '보안 비밀번호 제거',
-    '안전 보호 PIN 장치를 제거합니까? 기기 소유자 누구나 자산을 즉시 열람하게 됩니다.',
-    () => {
-      state.appPassword = '';
-      Store.clearPassword();
-      state.isLocked = false;
-      showToast('가계부 보안 잠금 기능이 해제되었습니다.');
-      renderAll();
-      renderSettingsModalContent();
-    }
-  );
+  showConfirm('보안 비밀번호 제거', '안전 보호 PIN 장치를 제거합니까? 기기 소유자 누구나 자산을 즉시 열람하게 됩니다.', () => {
+    state.appPassword = ''; Store.clearPassword(); state.isLocked = false;
+    showToast('가계부 보안 잠금 기능이 해제되었습니다.'); renderAll(); renderSettingsModalContent();
+  });
 }
 
-/* ---------- 7. TRANSACTIONS & MEMORY FILTER ---------- */
+/* ---------- 7. TRANSACTIONS & FILTER ---------- */
 function setTxType(type) {
   state.txType = type;
   $('txTypeExpense').className = type === 'expense'
@@ -813,79 +795,52 @@ function populateCategoryDropdown() {
   dropdown.innerHTML = '';
   CATEGORIES[state.txType].forEach(cat => {
     const option = document.createElement('option');
-    option.value = cat;
-    option.innerText = cat;
+    option.value = cat; option.innerText = cat;
     dropdown.appendChild(option);
   });
 }
 
 function handleAddTransaction(e) {
   e.preventDefault();
-  const amountInput = $('txAmount');
-  const descInput = $('txDescription');
-  const dateInput = $('txDate');
-  const categoryInput = $('txCategory');
-
+  const amountInput = $('txAmount'), descInput = $('txDescription'), dateInput = $('txDate'), categoryInput = $('txCategory');
   const amount = parseInt(amountInput.value, 10);
-  const desc = descInput.value.trim();
-  const date = dateInput.value;
-  const category = categoryInput.value;
-
+  const desc = descInput.value.trim(), date = dateInput.value, category = categoryInput.value;
   if (!amount || amount <= 0) { showToast('올바른 금액을 입력해 주세요.'); return; }
   if (!desc) { showToast('내역 상세 설명을 적어주세요.'); return; }
-
-  const newTx = {
-    id: `t-${Date.now()}`,
-    type: state.txType,
-    category, amount, date,
-    description: desc
-  };
-
+  const newTx = { id: `t-${Date.now()}`, type: state.txType, category, amount, date, description: desc };
   state.transactions.unshift(newTx);
   Store.saveTransactions(state.transactions);
-
-  amountInput.value = '';
-  descInput.value = '';
+  amountInput.value = ''; descInput.value = '';
   showToast('새 거래 내역이 정상 등록되었습니다.');
   renderAll();
 }
 
 function handleDeleteTransaction(id) {
-  showConfirm(
-    '거래 내역 삭제',
-    '선택한 가계부 소비/지출 기록을 삭제하시겠습니까?',
-    () => {
-      state.transactions = state.transactions.filter(t => t.id !== id);
-      Store.saveTransactions(state.transactions);
-      showToast('성공적으로 기록이 삭제되었습니다.');
-      renderAll();
-    }
-  );
+  showConfirm('거래 내역 삭제', '선택한 가계부 소비/지출 기록을 삭제하시겠습니까?', () => {
+    state.transactions = state.transactions.filter(t => t.id !== id);
+    Store.saveTransactions(state.transactions);
+    showToast('성공적으로 기록이 삭제되었습니다.'); renderAll();
+  });
 }
 
 function handleToggleFixedPayment(feId) {
   const fe = state.fixedExpenses.find(f => f.id === feId);
   if (!fe) return;
-
-  const monthlyTx = getFilteredMonthlyTransactions(true); 
+  const monthlyTx = getFilteredMonthlyTransactions(true);
   const paidTx = monthlyTx.find(t => t.fixedExpenseId === feId);
-
   if (paidTx) {
     state.transactions = state.transactions.filter(t => t.id !== paidTx.id);
     Store.saveTransactions(state.transactions);
     showToast(`[${fe.name}] 납부를 취소했습니다.`);
   } else {
-    const dayStr = String(fe.day === 31 ? '28' : fe.day).padStart(2, '0');
+    // 말일/실제 그 달 마지막 날 반영
+    const resolvedDay = resolveFixedDay(fe.day, state.currentMonth);
+    const dayStr = String(resolvedDay).padStart(2, '0');
     const paymentDate = `${state.currentMonth}-${dayStr}`;
-
     state.transactions.unshift({
       id: `t-fixed-${fe.id}-${state.currentMonth}`,
-      type: 'expense',
-      category: '고정비',
-      amount: fe.amount,
-      date: paymentDate,
-      description: `[고정] ${fe.name}`,
-      fixedExpenseId: fe.id
+      type: 'expense', category: '고정비', amount: fe.amount,
+      date: paymentDate, description: `[고정] ${fe.name}`, fixedExpenseId: fe.id
     });
     Store.saveTransactions(state.transactions);
     showToast(`[${fe.name}] 납부 처리를 마쳤습니다.`);
@@ -895,31 +850,30 @@ function handleToggleFixedPayment(feId) {
 
 function getFilteredMonthlyTransactions(bypassFilters = false) {
   let list = state.transactions.filter(t => t.date.startsWith(state.currentMonth));
-  
   if (bypassFilters) return list;
 
   if (state.txSearchQuery) {
-    const query = state.txSearchQuery.toLowerCase();
-    list = list.filter(t => 
-      t.description.toLowerCase().includes(query) || 
-      t.category.toLowerCase().includes(query)
-    );
+    const q = state.txSearchQuery.toLowerCase();
+    list = list.filter(t => t.description.toLowerCase().includes(q) || t.category.toLowerCase().includes(q));
   }
+  if (state.txFilterType !== 'all') list = list.filter(t => t.type === state.txFilterType);
 
-  if (state.txFilterType !== 'all') {
-    list = list.filter(t => t.type === state.txFilterType);
-  }
+  const min = parseInt(state.filterMinAmount, 10);
+  const max = parseInt(state.filterMaxAmount, 10);
+  if (!isNaN(min)) list = list.filter(t => t.amount >= min);
+  if (!isNaN(max)) list = list.filter(t => t.amount <= max);
+
+  if (state.filterStartDate) list = list.filter(t => t.date >= state.filterStartDate);
+  if (state.filterEndDate) list = list.filter(t => t.date <= state.filterEndDate);
 
   return list.sort((a, b) => b.date.localeCompare(a.date));
 }
 
 function changeMonth(diff) {
   const [year, month] = state.currentMonth.split('-').map(Number);
-  let nextMonth = month + diff;
-  let nextYear = year;
-  if (nextMonth < 1) { nextMonth = 12; nextYear -= 1; }
-  else if (nextMonth > 12) { nextMonth = 1; nextYear += 1; }
-  state.currentMonth = `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
+  let nm = month + diff, ny = year;
+  if (nm < 1) { nm = 12; ny -= 1; } else if (nm > 12) { nm = 1; ny += 1; }
+  state.currentMonth = `${ny}-${String(nm).padStart(2, '0')}`;
   renderAll();
 }
 
@@ -929,20 +883,13 @@ function handleAddFixedExpense(e) {
   const nameVal = $('newFeName').value.trim();
   const amountVal = parseInt($('newFeAmount').value, 10);
   const dayVal = parseInt($('newFeDay').value, 10);
-
   if (!nameVal) { showToast('고정 지출명을 써주세요.'); return; }
   if (isNaN(amountVal) || amountVal <= 0) { showToast('올바른 금액(원)을 입력해 주세요.'); return; }
   if (isNaN(dayVal) || dayVal < 1 || dayVal > 31) { showToast('이체 예정일은 1일 ~ 31일 사이여야 합니다.'); return; }
 
   if (state.editingFeId) {
-    state.fixedExpenses = state.fixedExpenses.map(f =>
-      f.id === state.editingFeId ? { ...f, name: nameVal, amount: amountVal, day: dayVal } : f
-    );
-    state.transactions = state.transactions.map(t =>
-      t.fixedExpenseId === state.editingFeId
-        ? { ...t, amount: amountVal, description: `[고정] ${nameVal}` }
-        : t
-    );
+    state.fixedExpenses = state.fixedExpenses.map(f => f.id === state.editingFeId ? { ...f, name: nameVal, amount: amountVal, day: dayVal } : f);
+    state.transactions = state.transactions.map(t => t.fixedExpenseId === state.editingFeId ? { ...t, amount: amountVal, description: `[고정] ${nameVal}` } : t);
     Store.saveFixedExpenses(state.fixedExpenses);
     Store.saveTransactions(state.transactions);
     showToast('지정 고정비 설정이 수정되었습니다.');
@@ -952,27 +899,18 @@ function handleAddFixedExpense(e) {
     Store.saveFixedExpenses(state.fixedExpenses);
     showToast('신규 고정비 정보가 추가되었습니다.');
   }
-
-  renderAll();
-  renderSettingsModalContent();
+  renderAll(); renderSettingsModalContent();
 }
 
 function handleDeleteFixedExpense(feId) {
-  showConfirm(
-    '고정비 항목 삭제',
-    '선택한 고정비를 삭제할까요? 지출 타임라인 연동 내역은 유지되나 추적 아이디는 말소됩니다.',
-    () => {
-      state.fixedExpenses = state.fixedExpenses.filter(f => f.id !== feId);
-      state.transactions = state.transactions.map(t =>
-        t.fixedExpenseId === feId ? { ...t, fixedExpenseId: undefined } : t
-      );
-      Store.saveFixedExpenses(state.fixedExpenses);
-      Store.saveTransactions(state.transactions);
-      showToast('고정 지출 사양이 목록에서 해제되었습니다.');
-      renderAll();
-      renderSettingsModalContent();
-    }
-  );
+  showConfirm('고정비 항목 삭제', '선택한 고정비를 삭제할까요? 지출 타임라인 연동 내역은 유지되나 추적 아이디는 말소됩니다.', () => {
+    state.fixedExpenses = state.fixedExpenses.filter(f => f.id !== feId);
+    state.transactions = state.transactions.map(t => t.fixedExpenseId === feId ? { ...t, fixedExpenseId: undefined } : t);
+    Store.saveFixedExpenses(state.fixedExpenses);
+    Store.saveTransactions(state.transactions);
+    showToast('고정 지출 사양이 목록에서 해제되었습니다.');
+    renderAll(); renderSettingsModalContent();
+  });
 }
 
 function startEditFixedExpense(feId) {
@@ -980,71 +918,142 @@ function startEditFixedExpense(feId) {
   if (!fe) return;
   state.editingFeId = fe.id;
   renderSettingsModalContent();
-  $('newFeName').value = fe.name;
-  $('newFeAmount').value = fe.amount;
-  $('newFeDay').value = fe.day;
+  $('newFeName').value = fe.name; $('newFeAmount').value = fe.amount; $('newFeDay').value = fe.day;
+}
+function cancelEditFixedExpense() { state.editingFeId = null; renderSettingsModalContent(); }
+
+/* ---------- 9. BUDGET ---------- */
+function handleSaveBudget(e) {
+  e.preventDefault();
+  const v = parseInt($('budgetInput').value, 10);
+  if (isNaN(v) || v < 0) { showToast('0 이상의 예산 금액을 입력해 주세요.'); return; }
+  state.monthlyBudget = v;
+  Store.saveBudget(v);
+  state.budgetAlertShownFor = '';
+  showToast(v === 0 ? '월 예산이 해제되었습니다.' : `월 예산이 ${formatKRW(v)}(으)로 설정되었습니다.`);
+  renderAll();
 }
 
-function cancelEditFixedExpense() {
-  state.editingFeId = null;
-  renderSettingsModalContent();
+/* ---------- 10. DATA BACKUP / RESTORE ---------- */
+function handleExportData() {
+  const payload = {
+    app: APP_NAME,
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    data: {
+      fixedExpenses: state.fixedExpenses,
+      transactions: state.transactions,
+      monthlyBudget: state.monthlyBudget
+    }
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0, 10);
+  a.href = url; a.download = `젬가계부_백업_${stamp}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  showToast('백업 파일을 내보냈습니다.');
 }
 
-/* ---------- 9. PREMIUM CHARTS (Chart.js) ---------- */
+function handleImportData(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      const d = parsed.data || parsed;
+      if (!d.transactions && !d.fixedExpenses) throw new Error('형식 불일치');
+      showConfirm('데이터 복원', '기존 데이터를 백업 파일의 내용으로 덮어씁니다. 진행할까요?', () => {
+        if (Array.isArray(d.fixedExpenses)) state.fixedExpenses = d.fixedExpenses;
+        if (Array.isArray(d.transactions)) state.transactions = d.transactions;
+        if (typeof d.monthlyBudget === 'number') state.monthlyBudget = d.monthlyBudget;
+        Store.saveFixedExpenses(state.fixedExpenses);
+        Store.saveTransactions(state.transactions);
+        Store.saveBudget(state.monthlyBudget);
+        showToast('데이터를 성공적으로 복원했습니다.');
+        renderAll(); renderSettingsModalContent();
+      });
+    } catch (err) {
+      console.error(err);
+      showToast('⚠️ 올바른 백업 파일이 아닙니다.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- 11. CHARTS ---------- */
 function updateCategoryChart(categoriesMap) {
   const ctx = $('categoryChart').getContext('2d');
-  
   const labels = Object.keys(categoriesMap);
   const dataValues = Object.values(categoriesMap);
-
-  if (myDoughnutChart) {
-    myDoughnutChart.destroy();
-  }
-
-  if (labels.length === 0) {
-    return;
-  }
-
+  if (myDoughnutChart) myDoughnutChart.destroy();
+  if (labels.length === 0) return;
   const colors = ['#6366f1', '#f43f5e', '#0ea5e9', '#10b981', '#f59e0b', '#8b5cf6', '#64748b'];
-
   myDoughnutChart = new Chart(ctx, {
     type: 'doughnut',
-    data: {
-      labels: labels,
-      datasets: [{
-        data: dataValues,
-        backgroundColor: colors.slice(0, labels.length),
-        borderWidth: 2,
-        borderColor: '#ffffff',
-        hoverOffset: 6
-      }]
-    },
+    data: { labels, datasets: [{ data: dataValues, backgroundColor: colors.slice(0, labels.length), borderWidth: 2, borderColor: '#ffffff', hoverOffset: 6 }] },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              const val = context.raw || 0;
-              return ` ${context.label}: ${formatKRW(val)}`;
-            }
-          }
-        }
+        tooltip: { callbacks: { label: (c) => ` ${c.label}: ${formatKRW(c.raw || 0)}` } }
       },
       cutout: '72%'
     }
   });
 }
 
-/* ---------- 10. REAL-TIME RENDERING ---------- */
+function updateTrendChart() {
+  const ctx = $('trendChart').getContext('2d');
+  // 현재 월 기준 최근 6개월
+  const months = [];
+  let [y, m] = state.currentMonth.split('-').map(Number);
+  for (let i = 5; i >= 0; i--) {
+    let mm = m - i, yy = y;
+    while (mm < 1) { mm += 12; yy -= 1; }
+    months.push(`${yy}-${String(mm).padStart(2, '0')}`);
+  }
+  const incomeData = [], expenseData = [];
+  months.forEach(mon => {
+    let inc = 0, exp = 0;
+    state.transactions.forEach(t => {
+      if (t.date.startsWith(mon)) {
+        if (t.type === 'income') inc += t.amount; else exp += t.amount;
+      }
+    });
+    incomeData.push(inc); expenseData.push(exp);
+  });
+  const labels = months.map(mon => `${parseInt(mon.split('-')[1], 10)}월`);
+  if (myTrendChart) myTrendChart.destroy();
+  myTrendChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: '수입', data: incomeData, backgroundColor: '#10b981', borderRadius: 6, maxBarThickness: 26 },
+        { label: '지출', data: expenseData, backgroundColor: '#f43f5e', borderRadius: 6, maxBarThickness: 26 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${formatKRW(c.raw || 0)}` } }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+        y: { ticks: { font: { size: 10 }, callback: (v) => v >= 10000 ? (v / 10000) + '만' : v }, grid: { color: '#f1f5f9' } }
+      }
+    }
+  });
+}
+
+/* ---------- 12. REAL-TIME RENDERING ---------- */
 function renderAll() {
   if (state.isLocked) {
     $('lockScreen').classList.remove('hidden');
     $('mainApp').classList.add('hidden');
-    renderLockScreenText();
-    updatePinDots();
+    renderLockScreenText(); updatePinDots();
     return;
   }
   $('lockScreen').classList.add('hidden');
@@ -1054,27 +1063,28 @@ function renderAll() {
   $('currentMonthLabel').innerText = `${y}년 ${m}월`;
   $('fixedExpensesHeader').innerText = `${parseInt(m, 10)}월 고정비 이체 및 납부 타임라인`;
 
-  const monthlyRawTx = getFilteredMonthlyTransactions(true); 
+  const monthlyRawTx = getFilteredMonthlyTransactions(true);
   const paidFixedMap = {};
   monthlyRawTx.forEach(t => { if (t.fixedExpenseId) paidFixedMap[t.fixedExpenseId] = t; });
 
   const totals = calcMonthlyTotals(monthlyRawTx);
   renderStatCards(totals, paidFixedMap);
+  renderBudget(totals);
   populateCategoryDropdown();
   renderFixedTimeline(paidFixedMap);
-  
+
   const filteredTx = getFilteredMonthlyTransactions(false);
   renderTransactionList(filteredTx);
-  
+
   renderAnalysis(totals, monthlyRawTx, paidFixedMap);
+  updateTrendChart();
 }
 
 function calcMonthlyTotals(monthlyTx) {
   let totalIncome = 0, totalExpense = 0, fixedSpent = 0, variableSpent = 0;
   monthlyTx.forEach(t => {
-    if (t.type === 'income') {
-      totalIncome += t.amount;
-    } else {
+    if (t.type === 'income') totalIncome += t.amount;
+    else {
       totalExpense += t.amount;
       if (t.category === '고정비' || t.fixedExpenseId) fixedSpent += t.amount;
       else variableSpent += t.amount;
@@ -1087,21 +1097,51 @@ function renderStatCards(totals, paidFixedMap) {
   const { totalIncome, totalExpense } = totals;
   $('statIncome').innerText = formatKRW(totalIncome);
   $('statExpense').innerText = formatKRW(totalExpense);
-
   const balanceVal = totalIncome - totalExpense;
   const statBalanceEl = $('statBalance');
   statBalanceEl.innerText = formatKRW(balanceVal);
-  statBalanceEl.className = balanceVal >= 0 ? "text-base sm:text-xl font-black text-slate-800" : "text-base sm:text-xl font-black text-rose-500";
+  statBalanceEl.className = balanceVal >= 0 ? "text-base sm:text-xl font-black text-slate-800 truncate" : "text-base sm:text-xl font-black text-rose-500 truncate";
   $('balanceIconContainer').className = balanceVal >= 0
-    ? "p-2 bg-slate-100 text-slate-700 rounded-lg hidden sm:block"
-    : "p-2 bg-rose-50 text-rose-600 rounded-lg hidden sm:block";
+    ? "p-2 bg-slate-100 text-slate-700 rounded-lg hidden sm:block shrink-0"
+    : "p-2 bg-rose-50 text-rose-600 rounded-lg hidden sm:block shrink-0";
 
-  const totalFixedPlanned = state.fixedExpenses.reduce((sum, f) => sum + f.amount, 0);
-  const unpaidFixedPlanned = state.fixedExpenses.reduce(
-    (sum, f) => sum + (paidFixedMap[f.id] ? 0 : f.amount), 0
-  );
+  const totalFixedPlanned = state.fixedExpenses.reduce((s, f) => s + f.amount, 0);
+  const unpaidFixedPlanned = state.fixedExpenses.reduce((s, f) => s + (paidFixedMap[f.id] ? 0 : f.amount), 0);
   $('statUnpaidFixed').innerText = formatKRW(unpaidFixedPlanned);
   $('statTotalFixedPlanned').innerText = `총 계획: ${formatKRW(totalFixedPlanned)}`;
+}
+
+function renderBudget(totals) {
+  const banner = $('budgetBanner');
+  if (!state.monthlyBudget || state.monthlyBudget <= 0) { banner.classList.add('hidden'); return; }
+  banner.classList.remove('hidden');
+
+  const spent = totals.totalExpense;
+  const budget = state.monthlyBudget;
+  const pct = Math.min((spent / budget) * 100, 100);
+  const rawPct = (spent / budget) * 100;
+  const remain = budget - spent;
+
+  const bar = $('budgetProgressBar');
+  const badge = $('budgetStatusBadge');
+  let barColor = 'bg-emerald-500', badgeColor = 'bg-emerald-50 text-emerald-700', label = '여유';
+  if (rawPct >= 100) { barColor = 'bg-rose-500'; badgeColor = 'bg-rose-50 text-rose-700'; label = '초과'; }
+  else if (rawPct >= 80) { barColor = 'bg-amber-500'; badgeColor = 'bg-amber-50 text-amber-700'; label = '주의'; }
+
+  bar.className = `h-full transition-all duration-500 rounded-full ${barColor}`;
+  bar.style.width = `${pct}%`;
+  badge.className = `text-[10px] px-2.5 py-1 rounded-full font-bold ${badgeColor}`;
+  badge.innerText = `${label} · ${Math.round(rawPct)}%`;
+  $('budgetSpentLabel').innerText = `지출 ${formatKRW(spent)}`;
+  $('budgetRemainLabel').innerText = remain >= 0 ? `남은 예산 ${formatKRW(remain)}` : `초과 ${formatKRW(Math.abs(remain))}`;
+
+  // 초과 시 1회 알림 (현재 달이 실제 이번 달일 때만)
+  const nowMonth = new Date();
+  const realMonthStr = `${nowMonth.getFullYear()}-${String(nowMonth.getMonth() + 1).padStart(2, '0')}`;
+  if (rawPct >= 100 && state.currentMonth === realMonthStr && state.budgetAlertShownFor !== state.currentMonth) {
+    state.budgetAlertShownFor = state.currentMonth;
+    showToast(`🚨 이번 달 예산을 초과했습니다! (${formatKRW(spent)} / ${formatKRW(budget)})`);
+  }
 }
 
 function renderFixedTimeline(paidFixedMap) {
@@ -1117,26 +1157,25 @@ function renderFixedTimeline(paidFixedMap) {
 
   sortedFE.forEach(fe => {
     const isPaid = !!paidFixedMap[fe.id];
-    const dDayText = fe.day === 31 ? '말일' : `${fe.day}일`;
+    const resolvedDay = resolveFixedDay(fe.day, state.currentMonth);
+    const dDayText = (fe.day >= 31 || resolvedDay === lastDayOfMonth(state.currentMonth)) ? `말일(${resolvedDay}일)` : `${fe.day}일`;
 
     const card = document.createElement('div');
-    card.className = `flex items-center justify-between p-3 rounded-xl border transition-all ${
-      isPaid ? 'bg-slate-50 border-slate-200 opacity-75' : 'bg-white border-slate-200 hover:border-indigo-200 hover:shadow-sm'
-    }`;
+    card.className = `flex items-center justify-between p-3 rounded-xl border transition-all gap-2 ${isPaid ? 'bg-slate-50 border-slate-200 opacity-75' : 'bg-white border-slate-200 hover:border-indigo-200 hover:shadow-sm'}`;
     card.innerHTML = `
-      <div class="flex items-center gap-2.5">
-        <button class="fixedToggleBtn w-5.5 h-5.5 rounded-lg flex items-center justify-center transition-all ${isPaid ? 'bg-indigo-600 text-white' : 'border-2 border-slate-300 hover:border-slate-400'}" data-fe-id="${fe.id}">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <button class="fixedToggleBtn w-6 h-6 rounded-lg flex items-center justify-center transition-all shrink-0 ${isPaid ? 'bg-indigo-600 text-white' : 'border-2 border-slate-300 hover:border-slate-400'}" data-fe-id="${fe.id}">
           ${isPaid ? `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg>` : ''}
         </button>
-        <div>
-          <p class="font-bold text-xs ${isPaid ? 'line-through text-slate-500' : 'text-slate-800'}">${fe.name}</p>
+        <div class="min-w-0">
+          <p class="font-bold text-xs truncate ${isPaid ? 'line-through text-slate-500' : 'text-slate-800'}">${fe.name}</p>
           <div class="flex gap-1.5 items-center mt-0.5">
-            <span class="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">${dDayText}</span>
-            <span class="text-[11px] font-bold text-indigo-600">${formatKRW(fe.amount)}</span>
+            <span class="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded whitespace-nowrap">${dDayText}</span>
+            <span class="text-[11px] font-bold text-indigo-600 whitespace-nowrap">${formatKRW(fe.amount)}</span>
           </div>
         </div>
       </div>
-      <button class="fixedToggleBtn text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all ${isPaid ? 'bg-slate-200 border-slate-300 text-slate-600 hover:bg-slate-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'}" data-fe-id="${fe.id}">
+      <button class="fixedToggleBtn text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all shrink-0 ${isPaid ? 'bg-slate-200 border-slate-300 text-slate-600 hover:bg-slate-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'}" data-fe-id="${fe.id}">
         ${isPaid ? '취소' : '납부'}
       </button>
     `;
@@ -1152,35 +1191,29 @@ function renderTransactionList(filteredTx) {
   const container = $('transactionListContainer');
   container.innerHTML = '';
   $('transactionCountBadge').innerText = `총 ${filteredTx.length}건`;
-
   if (filteredTx.length === 0) {
-    container.innerHTML = `
-      <div class="text-center py-10 text-slate-400">
-        <p class="text-xs font-semibold">조건에 맞는 가계부 내역이 존재하지 않습니다.</p>
-      </div>`;
+    container.innerHTML = `<div class="text-center py-10 text-slate-400"><p class="text-xs font-semibold">조건에 맞는 가계부 내역이 존재하지 않습니다.</p></div>`;
     return;
   }
-
   filteredTx.forEach(t => {
     let catColor = "bg-rose-50 text-rose-600";
     if (t.type === 'income') catColor = "bg-emerald-50 text-emerald-600";
     else if (t.category === '고정비') catColor = "bg-indigo-50 text-indigo-600";
-
     const row = document.createElement('div');
-    row.className = "py-3 flex items-center justify-between group";
+    row.className = "py-3 flex items-center justify-between group gap-2";
     row.innerHTML = `
-      <div class="flex items-center gap-2.5">
-        <div class="p-2 rounded-lg text-[10px] font-bold ${catColor}">${t.category}</div>
-        <div>
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="p-2 rounded-lg text-[10px] font-bold ${catColor} shrink-0">${t.category}</div>
+        <div class="min-w-0">
           <p class="font-bold text-slate-800 text-xs flex items-center gap-1">
-            ${t.description}
-            ${t.fixedExpenseId ? '<span class="text-[8px] bg-indigo-50 text-indigo-500 font-bold px-1 rounded">고정</span>' : ''}
+            <span class="truncate">${t.description}</span>
+            ${t.fixedExpenseId ? '<span class="text-[8px] bg-indigo-50 text-indigo-500 font-bold px-1 rounded shrink-0">고정</span>' : ''}
           </p>
           <p class="text-[10px] text-slate-400 font-medium mt-0.5">${t.date}</p>
         </div>
       </div>
-      <div class="flex items-center gap-3">
-        <span class="font-bold text-xs ${t.type === 'income' ? 'text-emerald-600' : 'text-slate-800'}">
+      <div class="flex items-center gap-3 shrink-0">
+        <span class="font-bold text-xs whitespace-nowrap ${t.type === 'income' ? 'text-emerald-600' : 'text-slate-800'}">
           ${t.type === 'income' ? '+' : '-'}${t.amount.toLocaleString()}원
         </span>
         <button class="deleteTxBtn p-1 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-all" data-tx-id="${t.id}" title="기록삭제">
@@ -1190,7 +1223,6 @@ function renderTransactionList(filteredTx) {
     `;
     container.appendChild(row);
   });
-
   container.querySelectorAll('.deleteTxBtn').forEach(btn => {
     btn.addEventListener('click', () => handleDeleteTransaction(btn.dataset.txId));
   });
@@ -1200,74 +1232,59 @@ function renderAnalysis(totals, monthlyRawTx, paidFixedMap) {
   const { totalExpense } = totals;
   const paidFixedCount = Object.keys(paidFixedMap).length;
   const totalFixedCount = state.fixedExpenses.length;
-
   $('fixedPayProgressLabel').innerText = `${paidFixedCount} / ${totalFixedCount} 건`;
   const progressPercent = totalFixedCount > 0 ? (paidFixedCount / totalFixedCount) * 100 : 0;
   $('fixedPayProgressBar').style.width = `${progressPercent}%`;
 
   const chartSummaryWrapper = $('chartSummaryContainer');
-
   if (totalExpense <= 0) {
     chartSummaryWrapper.innerHTML = `<div class="text-center py-4 text-xs text-slate-400 bg-slate-50 rounded-xl">지출 기록이 존재하지 않습니다.</div>`;
-    if (myDoughnutChart) {
-      myDoughnutChart.destroy();
-    }
+    if (myDoughnutChart) myDoughnutChart.destroy();
     return;
   }
 
   const expenseCategoriesMap = {};
-  monthlyRawTx.forEach(t => {
-    if (t.type === 'expense') {
-      expenseCategoriesMap[t.category] = (expenseCategoriesMap[t.category] || 0) + t.amount;
-    }
-  });
-
+  monthlyRawTx.forEach(t => { if (t.type === 'expense') expenseCategoriesMap[t.category] = (expenseCategoriesMap[t.category] || 0) + t.amount; });
   updateCategoryChart(expenseCategoriesMap);
 
   let legendHtml = `<div class="grid grid-cols-1 gap-1.5 text-xs">`;
   const sortedCategories = Object.entries(expenseCategoriesMap).sort((a, b) => b[1] - a[1]);
-  
   const colors = ['bg-indigo-500', 'bg-rose-400', 'bg-sky-400', 'bg-emerald-400', 'bg-amber-400', 'bg-violet-400', 'bg-slate-400'];
-
   sortedCategories.forEach(([categoryName, totalAmt], idx) => {
     const pct = Math.round((totalAmt / totalExpense) * 100);
     const colorClass = colors[idx % colors.length];
-    
     legendHtml += `
-      <div class="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded-lg transition">
-        <div class="flex items-center gap-1.5">
-          <span class="w-2 h-2 rounded-full ${colorClass} inline-block"></span>
-          <span class="font-bold text-slate-700 text-[11px]">${categoryName}</span>
-          <span class="text-[9px] text-slate-400 font-bold">${pct}%</span>
+      <div class="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded-lg transition gap-2">
+        <div class="flex items-center gap-1.5 min-w-0">
+          <span class="w-2 h-2 rounded-full ${colorClass} inline-block shrink-0"></span>
+          <span class="font-bold text-slate-700 text-[11px] truncate">${categoryName}</span>
+          <span class="text-[9px] text-slate-400 font-bold shrink-0">${pct}%</span>
         </div>
-        <span class="font-bold text-slate-800 text-[11px]">${formatKRW(totalAmt)}</span>
-      </div>
-    `;
+        <span class="font-bold text-slate-800 text-[11px] whitespace-nowrap">${formatKRW(totalAmt)}</span>
+      </div>`;
   });
   legendHtml += `</div>`;
   chartSummaryWrapper.innerHTML = legendHtml;
 }
 
+/* ---------- 13. SETTINGS TABS ---------- */
 function setSecurityTab(tab) {
   state.securityTab = tab;
-  $('tabBtnInfo').className = tab === 'info'
-    ? "settingsTabBtn flex-1 py-3 text-xs font-bold border-b-2 transition border-indigo-600 text-indigo-600 bg-white"
-    : "settingsTabBtn flex-1 py-3 text-xs font-bold border-b-2 transition border-transparent text-slate-500 hover:text-slate-800";
-  $('tabBtnChange').className = tab === 'change'
-    ? "settingsTabBtn flex-1 py-3 text-xs font-bold border-b-2 transition border-indigo-600 text-indigo-600 bg-white"
-    : "settingsTabBtn flex-1 py-3 text-xs font-bold border-b-2 transition border-transparent text-slate-500 hover:text-slate-800";
+  document.querySelectorAll('.settingsTabBtn').forEach(btn => {
+    const active = btn.dataset.tab === tab;
+    btn.className = "settingsTabBtn flex-1 min-w-[90px] py-3 text-[11px] sm:text-xs font-bold border-b-2 transition whitespace-nowrap px-2 " +
+      (active ? "border-indigo-600 text-indigo-600 bg-white" : "border-transparent text-slate-500 hover:text-slate-800");
+  });
   renderSettingsModalContent();
 }
 
 function renderSettingsModalContent() {
   const container = $('settingsModalContent');
   container.innerHTML = '';
-
-  if (state.securityTab === 'info') {
-    container.appendChild(buildFixedExpenseSettingsSection());
-  } else {
-    container.appendChild(buildSecuritySettingsSection());
-  }
+  if (state.securityTab === 'info') container.appendChild(buildFixedExpenseSettingsSection());
+  else if (state.securityTab === 'budget') container.appendChild(buildBudgetSettingsSection());
+  else if (state.securityTab === 'data') container.appendChild(buildDataSettingsSection());
+  else container.appendChild(buildSecuritySettingsSection());
 }
 
 function buildFixedExpenseSettingsSection() {
@@ -1275,18 +1292,15 @@ function buildFixedExpenseSettingsSection() {
   section.className = "space-y-4";
   section.innerHTML = `
     <div class="bg-slate-50 p-3 rounded-xl border border-slate-200/60">
-      <h4 class="text-[10px] font-bold text-slate-700 uppercase tracking-wide mb-2">
-        ${state.editingFeId ? '✏️ 고정비 수정' : '➕ 고정 지출 추가'}
-      </h4>
+      <h4 class="text-[10px] font-bold text-slate-700 uppercase tracking-wide mb-2">${state.editingFeId ? '✏️ 고정비 수정' : '➕ 고정 지출 추가'}</h4>
       <form id="fixedExpenseForm" class="flex flex-col gap-2">
         <input id="newFeName" type="text" placeholder="항목명 (예: 렌트카)" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-400" required>
         <div class="grid grid-cols-2 gap-2">
-          <input id="newFeAmount" type="number" placeholder="금액 (원)" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-400" required>
-          <input id="newFeDay" type="number" placeholder="예정일 (1~31일)" min="1" max="31" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-400" required>
+          <input id="newFeAmount" type="number" inputmode="numeric" placeholder="금액 (원)" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-400" required>
+          <input id="newFeDay" type="number" inputmode="numeric" placeholder="예정일 (1~31, 31=말일)" min="1" max="31" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-400" required>
         </div>
-        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-xs font-bold transition">
-          ${state.editingFeId ? '수정 완료' : '추가하기'}
-        </button>
+        <p class="text-[9px] text-slate-400">※ 예정일을 31로 두면 2·4·6월 등 짧은 달에는 자동으로 그 달 말일에 반영됩니다.</p>
+        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-xs font-bold transition">${state.editingFeId ? '수정 완료' : '추가하기'}</button>
       </form>
       ${state.editingFeId ? `<div class="mt-1.5 text-right"><button type="button" id="cancelEditFeBtn" class="text-[10px] text-rose-500 hover:underline">수정 취소</button></div>` : ''}
     </div>
@@ -1296,18 +1310,13 @@ function buildFixedExpenseSettingsSection() {
         <table class="w-full text-left border-collapse text-xs">
           <thead>
             <tr class="bg-slate-50 border-b border-slate-200 text-[10px] text-slate-500 font-bold">
-              <th class="p-2">항목명</th>
-              <th class="p-2 text-right">예정 금액</th>
-              <th class="p-2 text-center">예정일</th>
-              <th class="p-2 text-center">관리</th>
+              <th class="p-2">항목명</th><th class="p-2 text-right">예정 금액</th><th class="p-2 text-center">예정일</th><th class="p-2 text-center">관리</th>
             </tr>
           </thead>
           <tbody id="fixedExpensesTableBody" class="divide-y divide-slate-100"></tbody>
         </table>
       </div>
-    </div>
-  `;
-
+    </div>`;
   section.querySelector('#fixedExpenseForm').addEventListener('submit', handleAddFixedExpense);
   const cancelBtn = section.querySelector('#cancelEditFeBtn');
   if (cancelBtn) cancelBtn.addEventListener('click', cancelEditFixedExpense);
@@ -1321,25 +1330,94 @@ function buildFixedExpenseSettingsSection() {
       tr.className = "hover:bg-slate-50/50";
       tr.innerHTML = `
         <td class="p-2 font-bold text-slate-800">${fe.name}</td>
-        <td class="p-2 text-right font-black text-indigo-600">${formatKRW(fe.amount)}</td>
-        <td class="p-2 text-center text-slate-600 text-[10px]">${fe.day === 31 ? '말일' : `${fe.day}일`}</td>
+        <td class="p-2 text-right font-black text-indigo-600 whitespace-nowrap">${formatKRW(fe.amount)}</td>
+        <td class="p-2 text-center text-slate-600 text-[10px] whitespace-nowrap">${fe.day >= 31 ? '말일' : `${fe.day}일`}</td>
         <td class="p-2 text-center">
           <div class="flex justify-center gap-1.5">
-            <button class="editFeBtn p-1 text-slate-500 hover:text-indigo-600" data-fe-id="${fe.id}">
-              ✏️
-            </button>
-            <button class="deleteFeBtn p-1 text-slate-500 hover:text-rose-600" data-fe-id="${fe.id}">
-              🗑️
-            </button>
+            <button class="editFeBtn p-1 text-slate-500 hover:text-indigo-600" data-fe-id="${fe.id}">✏️</button>
+            <button class="deleteFeBtn p-1 text-slate-500 hover:text-rose-600" data-fe-id="${fe.id}">🗑️</button>
           </div>
-        </td>
-      `;
+        </td>`;
       tbody.appendChild(tr);
     });
     tbody.querySelectorAll('.editFeBtn').forEach(b => b.addEventListener('click', () => startEditFixedExpense(b.dataset.feId)));
     tbody.querySelectorAll('.deleteFeBtn').forEach(b => b.addEventListener('click', () => handleDeleteFixedExpense(b.dataset.feId)));
   }
+  return section;
+}
 
+function buildBudgetSettingsSection() {
+  const section = document.createElement('div');
+  section.className = "space-y-4";
+  const cur = state.monthlyBudget || 0;
+  section.innerHTML = `
+    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
+      <h4 class="text-xs font-bold text-slate-900 mb-1">🎯 월 지출 예산 설정</h4>
+      <p class="text-[10px] text-slate-500 mb-3">한 달 지출 한도를 정하면 상단에 사용 현황 막대가 표시되고, 한도를 넘으면 알림이 뜹니다. 0으로 두면 예산 기능이 꺼집니다.</p>
+      <form id="budgetForm" class="space-y-2.5">
+        <input id="budgetInput" type="number" inputmode="numeric" value="${cur || ''}" placeholder="예: 2000000" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold text-center focus:outline-none focus:border-indigo-400">
+        <div class="grid grid-cols-3 gap-2">
+          <button type="button" data-add="1000000" class="budgetQuickBtn text-[11px] font-bold bg-white border border-slate-200 rounded-lg py-1.5 hover:border-indigo-400 transition">+100만</button>
+          <button type="button" data-add="500000" class="budgetQuickBtn text-[11px] font-bold bg-white border border-slate-200 rounded-lg py-1.5 hover:border-indigo-400 transition">+50만</button>
+          <button type="button" data-add="100000" class="budgetQuickBtn text-[11px] font-bold bg-white border border-slate-200 rounded-lg py-1.5 hover:border-indigo-400 transition">+10만</button>
+        </div>
+        <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-indigo-100">예산 저장</button>
+      </form>
+      ${cur > 0 ? `<div class="mt-2 text-center text-[11px] text-slate-500">현재 설정 예산: <b class="text-indigo-600">${formatKRW(cur)}</b></div>` : ''}
+    </div>`;
+  section.querySelector('#budgetForm').addEventListener('submit', handleSaveBudget);
+  section.querySelectorAll('.budgetQuickBtn').forEach(b => {
+    b.addEventListener('click', () => {
+      const input = section.querySelector('#budgetInput');
+      const base = parseInt(input.value, 10) || 0;
+      input.value = base + parseInt(b.dataset.add, 10);
+    });
+  });
+  return section;
+}
+
+function buildDataSettingsSection() {
+  const section = document.createElement('div');
+  section.className = "space-y-4";
+  section.innerHTML = `
+    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
+      <h4 class="text-xs font-bold text-slate-900 mb-1">💾 데이터 백업 & 복원</h4>
+      <p class="text-[10px] text-slate-500 mb-3">모든 거래·고정비·예산 정보를 JSON 파일로 저장하거나, 백업 파일에서 불러올 수 있습니다. 기기 변경·초기화 전에 백업을 권장합니다.</p>
+      <div class="grid grid-cols-2 gap-2.5">
+        <button id="exportDataBtn" class="flex flex-col items-center gap-1.5 bg-white border border-slate-200 rounded-xl py-4 hover:border-indigo-400 hover:shadow-sm transition">
+          <span class="text-2xl">📤</span>
+          <span class="text-xs font-bold text-slate-700">백업 내보내기</span>
+          <span class="text-[9px] text-slate-400">JSON 파일 저장</span>
+        </button>
+        <button id="importDataBtn" class="flex flex-col items-center gap-1.5 bg-white border border-slate-200 rounded-xl py-4 hover:border-indigo-400 hover:shadow-sm transition">
+          <span class="text-2xl">📥</span>
+          <span class="text-xs font-bold text-slate-700">백업 가져오기</span>
+          <span class="text-[9px] text-slate-400">JSON 파일 복원</span>
+        </button>
+      </div>
+    </div>
+    <div class="bg-rose-50/60 p-4 rounded-xl border border-rose-100">
+      <h4 class="text-xs font-bold text-rose-700 mb-1">🗑️ 전체 데이터 초기화</h4>
+      <p class="text-[10px] text-rose-500/80 mb-3">모든 거래 내역과 고정비를 초기 상태로 되돌립니다. 복구할 수 없으니 먼저 백업하세요.</p>
+      <button id="resetAllBtn" class="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition">전체 초기화</button>
+    </div>
+    <div class="text-center text-[10px] text-slate-400">
+      현재 데이터: 거래 ${state.transactions.length}건 · 고정비 ${state.fixedExpenses.length}건
+    </div>`;
+  section.querySelector('#exportDataBtn').addEventListener('click', handleExportData);
+  section.querySelector('#importDataBtn').addEventListener('click', () => $('importFileInput').click());
+  section.querySelector('#resetAllBtn').addEventListener('click', () => {
+    showConfirm('전체 데이터 초기화', '모든 거래·고정비를 기본값으로 되돌립니다. 정말 진행할까요?', () => {
+      state.transactions = JSON.parse(JSON.stringify(DEFAULT_TRANSACTIONS));
+      state.fixedExpenses = JSON.parse(JSON.stringify(DEFAULT_FIXED_EXPENSES));
+      state.monthlyBudget = 0;
+      Store.saveTransactions(state.transactions);
+      Store.saveFixedExpenses(state.fixedExpenses);
+      Store.saveBudget(0);
+      showToast('데이터가 초기화되었습니다.');
+      renderAll(); renderSettingsModalContent();
+    });
+  });
   return section;
 }
 
@@ -1350,14 +1428,12 @@ function buildSecuritySettingsSection() {
     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
       <h4 class="text-xs font-bold text-slate-900 mb-1">🔑 보안 잠금 상태</h4>
       <p class="text-[10px] text-slate-500 mb-3">암호가 활성화되면 앱 구동 및 잠금 터치 시 자산 조회가 통제됩니다.</p>
-      <div class="flex items-center justify-between bg-white p-3 rounded-lg border border-slate-200">
-        <div>
+      <div class="flex items-center justify-between bg-white p-3 rounded-lg border border-slate-200 gap-2">
+        <div class="min-w-0">
           <span class="text-[10px] text-slate-400 block font-semibold">현재 상태</span>
-          <span class="text-xs font-bold ${state.appPassword ? 'text-emerald-600' : 'text-slate-500'}">
-            ${state.appPassword ? '🟢 비밀번호 잠금 사용 중' : '⚪ 잠금장치 꺼짐'}
-          </span>
+          <span class="text-xs font-bold ${state.appPassword ? 'text-emerald-600' : 'text-slate-500'}">${state.appPassword ? '🟢 비밀번호 잠금 사용 중' : '⚪ 잠금장치 꺼짐'}</span>
         </div>
-        ${state.appPassword ? `<button type="button" id="disableSecurityBtn" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[10px] rounded-lg border border-rose-200 transition">잠금 해제</button>` : ''}
+        ${state.appPassword ? `<button type="button" id="disableSecurityBtn" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[10px] rounded-lg border border-rose-200 transition shrink-0">잠금 해제</button>` : ''}
       </div>
     </div>
     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
@@ -1365,44 +1441,35 @@ function buildSecuritySettingsSection() {
       <form id="securityForm" class="space-y-3">
         <input id="newSecPin" type="password" maxlength="4" pattern="[0-9]*" inputmode="numeric" placeholder="신규 비밀번호 (4자리)" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-center focus:outline-none focus:border-indigo-400 font-mono tracking-widest" required>
         <input id="confirmSecPin" type="password" maxlength="4" pattern="[0-9]*" inputmode="numeric" placeholder="비밀번호 확인" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-center focus:outline-none focus:border-indigo-400 font-mono tracking-widest" required>
-        <button type="submit" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-indigo-100">
-          확인 완료
-        </button>
+        <button type="submit" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-indigo-100">확인 완료</button>
       </form>
-    </div>
-  `;
-
+    </div>`;
   section.querySelector('#securityForm').addEventListener('submit', handleUpdateSecuritySettings);
   const disableBtn = section.querySelector('#disableSecurityBtn');
   if (disableBtn) disableBtn.addEventListener('click', handleDisableSecurity);
-
   return section;
 }
 
-/* ---------- 11. STATIC INTERACTIVE EVENT BINDINGS ---------- */
+/* ---------- 14. STATIC EVENT BINDINGS ---------- */
 function bindStaticEvents() {
-  document.querySelectorAll('.keypadBtn').forEach(btn => {
-    btn.addEventListener('click', () => handleKeypad(btn.dataset.key));
-  });
+  document.querySelectorAll('.keypadBtn').forEach(btn => btn.addEventListener('click', () => handleKeypad(btn.dataset.key)));
   window.addEventListener('keydown', (e) => {
     if (!state.isLocked) return;
     if (e.key >= '0' && e.key <= '9') handleKeypad(e.key);
     else if (e.key === 'Backspace') handleKeypad('back');
   });
 
-  // Navigation
   $('prevMonthBtn').addEventListener('click', () => changeMonth(-1));
   $('nextMonthBtn').addEventListener('click', () => changeMonth(1));
   $('lockBtn').addEventListener('click', lockApp);
   $('settingsBtn').addEventListener('click', openSettingsModal);
   $('closeSettingsBtn').addEventListener('click', closeSettingsModal);
   $('closeSettingsBtn2').addEventListener('click', closeSettingsModal);
-  
+
   $('installBtn').addEventListener('click', openInstallModal);
   $('closeInstallBtn').addEventListener('click', closeInstallModal);
   $('closeInstallBtn2').addEventListener('click', closeInstallModal);
 
-  // Install PWA Action
   $('pwaInstallTriggerBtn').addEventListener('click', async () => {
     if (state.deferredPrompt) {
       state.deferredPrompt.prompt();
@@ -1416,27 +1483,34 @@ function bindStaticEvents() {
       openInstallModal();
     }
   });
+  $('pwaCloseBtn').addEventListener('click', () => $('pwaInstallBanner').classList.add('hidden'));
 
-  $('pwaCloseBtn').addEventListener('click', () => {
-    $('pwaInstallBanner').classList.add('hidden');
-  });
-
-  document.querySelectorAll('.settingsTabBtn').forEach(btn => {
-    btn.addEventListener('click', () => setSecurityTab(btn.dataset.tab));
-  });
+  document.querySelectorAll('.settingsTabBtn').forEach(btn => btn.addEventListener('click', () => setSecurityTab(btn.dataset.tab)));
 
   $('transactionForm').addEventListener('submit', handleAddTransaction);
-  document.querySelectorAll('.txTypeBtn').forEach(btn => {
-    btn.addEventListener('click', () => setTxType(btn.dataset.type));
+  document.querySelectorAll('.txTypeBtn').forEach(btn => btn.addEventListener('click', () => setTxType(btn.dataset.type)));
+
+  $('txSearch').addEventListener('input', (e) => { state.txSearchQuery = e.target.value; renderAll(); });
+  $('txFilterType').addEventListener('change', (e) => { state.txFilterType = e.target.value; renderAll(); });
+
+  // 고급 필터
+  $('advFilterToggle').addEventListener('click', () => $('advFilterPanel').classList.toggle('hidden'));
+  $('filterMinAmount').addEventListener('input', (e) => { state.filterMinAmount = e.target.value; renderAll(); });
+  $('filterMaxAmount').addEventListener('input', (e) => { state.filterMaxAmount = e.target.value; renderAll(); });
+  $('filterStartDate').addEventListener('change', (e) => { state.filterStartDate = e.target.value; renderAll(); });
+  $('filterEndDate').addEventListener('change', (e) => { state.filterEndDate = e.target.value; renderAll(); });
+  $('filterResetBtn').addEventListener('click', () => {
+    state.filterMinAmount = ''; state.filterMaxAmount = ''; state.filterStartDate = ''; state.filterEndDate = '';
+    $('filterMinAmount').value = ''; $('filterMaxAmount').value = '';
+    $('filterStartDate').value = ''; $('filterEndDate').value = '';
+    renderAll();
   });
 
-  $('txSearch').addEventListener('input', (e) => {
-    state.txSearchQuery = e.target.value;
-    renderAll();
-  });
-  $('txFilterType').addEventListener('change', (e) => {
-    state.txFilterType = e.target.value;
-    renderAll();
+  // 데이터 가져오기 input
+  $('importFileInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) handleImportData(file);
+    e.target.value = '';
   });
 
   $('confirmCancelBtn').addEventListener('click', closeConfirm);
@@ -1448,54 +1522,45 @@ function bindStaticEvents() {
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     state.deferredPrompt = e;
-    
     setTimeout(() => {
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-      if (!isStandalone) {
-        $('pwaInstallBanner').classList.remove('hidden');
-      }
+      if (!isStandalone) $('pwaInstallBanner').classList.remove('hidden');
     }, 1200);
   });
 
-  const fallbackImgHandler = function() {
-    this.src = 'https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?auto=format&fit=crop&w=160&q=80';
-  };
-  $('appIconImage').addEventListener('error', fallbackImgHandler);
-  $('lockAppIcon').addEventListener('error', fallbackImgHandler);
-  $('headerAppIcon').addEventListener('error', fallbackImgHandler);
+  // 아이콘 fallback: mybudget.png 없을 때 인라인 SVG(data URI)로 대체 → 깨진 이미지 방지
+  const FALLBACK_ICON = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#34d399"/><stop offset="1" stop-color="#0d9488"/>
+      </linearGradient></defs>
+      <rect width="192" height="192" rx="44" fill="url(#g)"/>
+      <text x="96" y="124" font-size="96" text-anchor="middle" font-family="sans-serif">💰</text>
+    </svg>`
+  );
+  const fallbackImgHandler = function () { this.onerror = null; this.src = FALLBACK_ICON; };
+  ['appIconImage', 'lockAppIcon', 'headerAppIcon', 'pwaBannerIcon'].forEach(id => {
+    const el = $(id);
+    if (el) el.addEventListener('error', fallbackImgHandler);
+  });
 }
 
 function openSettingsModal() {
   state.editingFeId = null;
-  state.securityTab = 'info';
   setSecurityTab('info');
   const modal = $('settingsModal');
-  modal.classList.remove('hidden');
-  modal.classList.add('flex');
+  modal.classList.remove('hidden'); modal.classList.add('flex');
 }
-function closeSettingsModal() {
-  const modal = $('settingsModal');
-  modal.classList.add('hidden');
-  modal.classList.remove('flex');
-}
-function openInstallModal() {
-  const modal = $('installModal');
-  modal.classList.remove('hidden');
-  modal.classList.add('flex');
-}
-function closeInstallModal() {
-  const modal = $('installModal');
-  modal.classList.add('hidden');
-  modal.classList.remove('flex');
-}
+function closeSettingsModal() { const m = $('settingsModal'); m.classList.add('hidden'); m.classList.remove('flex'); }
+function openInstallModal() { const m = $('installModal'); m.classList.remove('hidden'); m.classList.add('flex'); }
+function closeInstallModal() { const m = $('installModal'); m.classList.add('hidden'); m.classList.remove('flex'); }
 
-/* ---------- 12. INITIALIZATION & SW REGISTRATION ---------- */
+/* ---------- 15. INIT & SW ---------- */
 async function init() {
   const today = new Date();
-  const yearStr = today.getFullYear(); 
-  const monthStr = String(today.getMonth() + 1).padStart(2, '0'); 
-  const dateStr = String(today.getDate()).padStart(2, '0'); 
-
+  const yearStr = today.getFullYear();
+  const monthStr = String(today.getMonth() + 1).padStart(2, '0');
+  const dateStr = String(today.getDate()).padStart(2, '0');
   state.currentMonth = `${yearStr}-${monthStr}`;
   $('txDate').value = `${yearStr}-${monthStr}-${dateStr}`;
 
@@ -1506,25 +1571,25 @@ async function init() {
   const isStandalone = window.navigator.standalone === true;
   if (isiOS && !isStandalone) {
     setTimeout(() => {
-      $('pwaInstruction').innerText = "아이폰 Safari에서 '공유 📤 -> 홈 화면에 추가'를 눌러 설치하세요!";
+      $('pwaInstruction').innerText = "아이폰 Safari에서 '공유 📤 → 홈 화면에 추가'를 눌러 설치하세요!";
       $('pwaInstallBanner').classList.remove('hidden');
     }, 2000);
   }
 
   if ('serviceWorker' in navigator) {
     const swContent = `
-      const CACHE_NAME = 'gem-cache-v2';
+      const CACHE_NAME = 'gem-cache-v3';
       self.addEventListener('install', (e) => {
-        e.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(['./', './index.html', './mybudget.png'])));
+        self.skipWaiting();
+        e.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(['./', './mybudget.png']).catch(()=>{})));
       });
+      self.addEventListener('activate', (e) => { e.waitUntil(self.clients.claim()); });
       self.addEventListener('fetch', (e) => {
         e.respondWith(caches.match(e.request).then((res) => res || fetch(e.request)));
       });
     `;
     const blob = new Blob([swContent], { type: 'application/javascript' });
-    navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(err => {
-      console.log('SW registration bypassed.');
-    });
+    navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(() => console.log('SW registration bypassed.'));
   }
 }
 
