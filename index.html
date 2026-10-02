@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="가계부">
 <link rel="manifest" href="manifest.json">
+<meta name="description" content="배송 정산·카드 문자·고정 지출까지 한눈에 보는 가계부">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
@@ -515,6 +516,9 @@ function vHome() {
   const m = S.month, list = monthTx(m), T = totals(list), bal = T.inc - T.exp;
   const st = settleFor(m);
   let h = '';
+
+  // 앱 설치 안내 (크롬이 설치할 수 있다고 알려 줬을 때만)
+  if (deferredPrompt && !isStandalone()) h += `<button class="nudge" data-act="install"><img src="icon-192.png" alt="" style="width:42px;height:42px;border-radius:12px"><div style="flex:1"><div class="t">앱으로 설치하기</div><div class="s">홈 화면에서 앱처럼 바로 열려요</div></div><span class="chip acc">설치</span></button>`;
 
   // 백업 안내
   const bs = bkState();
@@ -1068,7 +1072,9 @@ function applyTheme() {
 
 /* ================= 버튼 동작 ================= */
 let deferredPrompt = null;
-window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; if (S.tab === 'set') render(); });
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; if (!S.locked && !document.querySelector('.sheet-bg')) render(); });
+window.addEventListener('appinstalled', () => { deferredPrompt = null; toast('앱으로 설치했어요. 홈 화면에서 열어 보세요'); render(); });
 const ACT = {
   prevM() { S.month = monthAdd(S.month, -1); render(); },
   nextM() { S.month = monthAdd(S.month, 1); render(); },
@@ -1116,7 +1122,13 @@ const ACT = {
     S.pw = ''; ls.del(K.pw); ls.set(K.pinSkip, '1'); render(); toast('PIN 잠금을 껐어요');
   },
   theme(b) { S.theme = b.dataset.v; ls.set(K.theme, S.theme); render(); },
-  async install() { if (!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; render(); },
+  async install() {
+    if (!deferredPrompt) { toast('크롬 메뉴(⋮) → "앱 설치"를 눌러 주세요', 4000); return; }
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') deferredPrompt = null;
+    render();
+  },
   async resetAll() {
     if (!(await ask('전체 초기화', '모든 거래를 지우고 고정 지출을 처음 상태로 되돌려요. 되돌릴 수 없어요.', '초기화', true))) return;
     S.tx = []; S.fe = clone(DEFAULT_FIXED); S.budget = 0;
