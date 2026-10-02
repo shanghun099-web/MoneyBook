@@ -189,10 +189,12 @@ select{background-image:linear-gradient(45deg,transparent 50%,var(--sub) 50%),li
 .pad{display:grid;grid-template-columns:repeat(3,76px);gap:14px 26px}
 .pad button{height:76px;border-radius:50%;border:0;background:transparent;font-size:28px;font-weight:600;color:var(--text)}
 .pad button:active{background:var(--soft2)}
+.lock .bio{margin-top:18px;display:flex;align-items:center;gap:8px;background:var(--accent-soft);color:var(--accent);border:0;border-radius:99px;padding:12px 20px;font-size:15px;font-weight:700}
 .lock .skip{margin-top:22px;background:none;border:0;color:var(--sub);font-size:14px;font-weight:600;padding:10px}
 
 .toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom));transform:translate(-50%,20px);background:#1F232A;color:#fff;padding:12px 18px;border-radius:14px;font-size:14px;font-weight:600;z-index:90;opacity:0;transition:all .25s;pointer-events:none;max-width:calc(100% - 32px);text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.2)}
 .toast.show{opacity:1;transform:translate(-50%,0)}
+.lock:not(.hidden) ~ .toast{bottom:auto;top:calc(env(safe-area-inset-top) + 16px)}
 .legend-row{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:14px}
 .legend-row i{width:10px;height:10px;border-radius:3px;flex-shrink:0}
 .legend-row .n{flex:1;font-weight:600}
@@ -227,7 +229,7 @@ select{background-image:linear-gradient(45deg,transparent 50%,var(--sub) 50%),li
 const APP = 'gem_smart_budget_pro';
 const K = {
   fe: `${APP}_fixed_expenses`, tx: `${APP}_transactions`, pw: `${APP}_app_password`, budget: `${APP}_monthly_budget`,
-  rules: 'mb_rules_v1', settle: 'mb_settle_v1', bk: 'mb_bk_v1', theme: 'mb_theme', pinSkip: 'mb_pin_skip'
+  rules: 'mb_rules_v1', settle: 'mb_settle_v1', bk: 'mb_bk_v1', theme: 'mb_theme', pinSkip: 'mb_pin_skip', bio: 'mb_bio_v1'
 };
 const DEFAULT_FIXED = [
   { id: 'fe-1', name: '예본 렌트카 비용', amount: 500000, day: 15 },
@@ -704,6 +706,7 @@ function vSettings() {
 
   h += `<section class="card"><div class="card-h"><h2>🔒 잠금 · 화면</h2></div>
     <div class="set-row"><div><div class="t">PIN 잠금</div><div class="s">${S.pw ? '켜짐' : '꺼짐'}</div></div><div style="display:flex;gap:6px">${S.pw ? '<button class="btn sm danger" data-act="pinOff">끄기</button>' : ''}<button class="btn sm" data-act="pinSet">${S.pw ? '바꾸기' : '켜기'}</button></div></div>
+    ${S.pw && bioSupported() ? `<div class="set-row"><div><div class="t">지문으로 열기</div><div class="s">${bioOn() ? '켜짐 · 지문이 안 되면 PIN으로' : 'PIN 대신 폰 지문으로 열어요'}</div></div><button class="switch ${bioOn() ? 'on' : ''}" data-act="bioToggle"></button></div>` : ''}
     <div class="set-row"><div class="t">화면 테마</div><div class="seg" style="width:180px">${[['auto', '자동'], ['light', '밝게'], ['dark', '어둡게']].map(([k, l]) => `<button class="${S.theme === k ? 'on' : ''}" data-act="theme" data-v="${k}">${l}</button>`).join('')}</div></div>
     ${deferredPrompt ? '<div class="set-row"><div class="t">홈 화면에 추가</div><button class="btn sm pri" data-act="install">추가</button></div>' : ''}
   </section>`;
@@ -1032,9 +1035,11 @@ function renderLock() {
   el.innerHTML = `<img src="icon-192.png" alt=""><h2>${title}</h2><p>${desc}</p>
     <div class="dots" id="dots">${[0, 1, 2, 3].map(i => `<i class="${i < S.pin.length ? 'on' : ''}"></i>`).join('')}</div>
     <div class="pad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button data-k="${n}">${n}</button>`).join('')}<span></span><button data-k="0">0</button><button data-k="back" aria-label="지우기" style="font-size:22px">⌫</button></div>
+    ${!setting && bioOn() ? `<button class="bio" data-k="bio"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11c0 3.5-1 6.5-2.5 9"/><path d="M8.5 6.5A6 6 0 0 1 18 11c0 2-.2 4-.7 6"/><path d="M6 9.5A6 6 0 0 0 6 11c0 2.5-.5 4.5-1.5 6"/><path d="M12 7a4 4 0 0 1 4 4c0 3-.5 5.5-1.5 8"/><path d="M8 11a4 4 0 0 1 .3-1.5"/></svg>지문으로 열기</button>` : ''}
     ${setting ? `<button class="skip" data-k="skip">${S.oldPw ? '그만두기 (예전 PIN 유지)' : '나중에 할게요'}</button>` : ''}`;
 }
 function pinKey(k) {
+  if (k === 'bio') { bioUnlock(); return; }
   if (k === 'skip') {
     if (S.oldPw) { S.pw = S.oldPw; S.oldPw = ''; } else ls.set(K.pinSkip, '1');
     S.locked = false; S.pin = ''; S.setup = 0; renderLock(); render(); return;
@@ -1061,6 +1066,47 @@ window.addEventListener('keydown', (e) => {
   if (e.key >= '0' && e.key <= '9') pinKey(e.key);
   else if (e.key === 'Backspace') pinKey('back');
 });
+
+/* ---------- 지문으로 열기 ----------
+   폰의 지문 확인(WebAuthn, 기기 안 인증기)을 빌려 쓴다. 지문은 폰이 확인하고 앱은 성공 여부만 받는다.
+   서버가 없으니 서명 검사는 하지 않는다 — PIN 과 같은 '이 기기 잠금' 용도. 실패하면 PIN 으로 연다 */
+const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const bioSupported = () => !!(window.PublicKeyCredential && navigator.credentials && window.isSecureContext);
+const bioOn = () => !!S.pw && !!ls.get(K.bio, '');
+let bioBusy = false;
+async function bioEnable() {
+  try {
+    if (!(await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable())) { toast('이 폰에서는 지문 잠금을 쓸 수 없어요. 폰 설정에 지문을 먼저 등록해 주세요', 4500); return; }
+    const cred = await navigator.credentials.create({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rp: { name: '젬의 스마트 가계부' },
+      user: { id: crypto.getRandomValues(new Uint8Array(16)), name: '가계부 잠금', displayName: '가계부 잠금' },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
+      timeout: 60000, attestation: 'none'
+    } });
+    ls.set(K.bio, b64(cred.rawId));
+    toast('지문 잠금을 켰어요. 다음부터 지문으로 열려요');
+  } catch (e) {
+    toast(e && e.name === 'NotAllowedError' ? '지문 등록을 취소했어요' : '지문을 등록하지 못했어요', 3500);
+  }
+  render();
+}
+async function bioUnlock(auto) {
+  if (bioBusy || !bioOn() || !S.locked) return;
+  bioBusy = true;
+  try {
+    await navigator.credentials.get({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: [{ type: 'public-key', id: unb64(ls.get(K.bio, '')), transports: ['internal'] }],
+      userVerification: 'required', timeout: 60000
+    } });
+    S.locked = false; S.pin = ''; renderLock(); render();
+  } catch (e) {
+    if (!auto) toast('지문 확인이 안 됐어요. PIN을 눌러 주세요');
+  } finally { bioBusy = false; }
+}
 
 /* ================= 테마 ================= */
 function applyTheme() {
@@ -1117,9 +1163,13 @@ const ACT = {
   exportFile() { exportFile(); },
   importFile() { $('fileIn').click(); },
   pinSet() { S.oldPw = S.pw; S.pw = ''; S.setup = 1; S.pin = ''; S.locked = true; renderLock(); },
+  async bioToggle() {
+    if (bioOn()) { ls.del(K.bio); render(); toast('지문 잠금을 껐어요. PIN으로 열어요'); }
+    else bioEnable();
+  },
   async pinOff() {
     if (!(await ask('PIN 잠금을 끌까요?', '폰을 가진 사람 누구나 가계부를 볼 수 있게 돼요.', '끄기', true))) return;
-    S.pw = ''; ls.del(K.pw); ls.set(K.pinSkip, '1'); render(); toast('PIN 잠금을 껐어요');
+    S.pw = ''; ls.del(K.pw); ls.del(K.bio); ls.set(K.pinSkip, '1'); render(); toast('PIN 잠금을 껐어요');
   },
   theme(b) { S.theme = b.dataset.v; ls.set(K.theme, S.theme); render(); },
   async install() {
@@ -1163,6 +1213,7 @@ function init() {
   S.locked = !!S.pw || ls.get(K.pinSkip, '') !== '1';
   S.setup = S.pw ? 0 : 1;
   render(); renderLock();
+  if (S.locked && bioOn()) setTimeout(() => bioUnlock(true), 350);
   // 하루에 한 번은 앱을 열 때 백업 (바뀐 게 없으면 건너뜀)
   if (bkOn() && Date.now() - (S.bk.lastAt || 0) > 20 * 3600000) setTimeout(() => runBackup(true), 3000);
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
